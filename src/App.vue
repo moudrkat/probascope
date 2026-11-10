@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MODELS, type ModelSpec } from './models'
 import { decide, download, isDownloaded, isNative, load, modelInfo, remove, type LayerInfo, type ModelInfo } from './native'
 
@@ -25,13 +25,16 @@ interface Result {
   ms: (number | null)[]
   forwardMs: number
   readoutMs: number
+  tokens_: string[]
+  change: number[][]
+  attention: Record<string, number[][]>
   layersError: string
   wallMs: number
   tokens: number
 }
 const result = ref<Result | null>(null)
+const ghost = ref<Result | null>(null) // the previous run, drawn dashed under the new curve
 const busy = ref(false)
-const wantLayers = ref(true) // the per-layer readout costs time on a phone; off = a plain decision
 const lensAt = ref<number | null>(null)
 const pickedBlock = ref<number | null>(null)
 
@@ -99,30 +102,30 @@ async function run() {
   error.value = ''
   busy.value = true
   lensAt.value = null
+  if (result.value && result.value.rows.length) ghost.value = result.value
   try {
     const keys = options.value.map((o) => o.trim()).filter(Boolean)
     const q: Record<string, unknown> =
       keys.length >= 2
         ? { type: 'choice', instructions: question.value, criteria: Object.fromEntries(keys.map((k) => [k, k])) }
         : { type: 'noul', instructions: question.value }
-    const withLayers = current.value.layers && wantLayers.value
+    const withLayers = current.value.layers
     const request = { state: stateText.value, questions: { q }, layers: withLayers }
     const { response, wallMs } = await decide(request)
     if (response.error) throw new Error((response.error as { message: string }).message)
     const answers = response.answers as Record<string, Record<string, unknown>>
     const a = answers.q
-    const layers = (a.layers ?? {}) as { error?: string; options?: string[]; probabilities?: (number[] | number | null)[]; ms?: (number | null)[]; timings?: { forward_ms: number; readout_ms: number } }
+    const layers = (a.layers ?? {}) as { error?: string; options?: string[]; probabilities?: (number[] | number | null)[]; ms?: (number | null)[]; timings?: { forward_ms: number; readout_ms: number }; tokens?: string[]; token_change?: number[][]; attention?: Record<string, number[][]> }
     const usage = response.usage as { input_tokens: number }
     if (a.type === 'noul') {
       const rows = (layers.probabilities ?? []).map((p) => (typeof p === 'number' ? [p] : null))
-      result.value = { type: 'noul', keys: ['yes'], final: [a.noul as number], rows, ms: layers.ms ?? [], forwardMs: layers.timings?.forward_ms ?? 0, readoutMs: layers.timings?.readout_ms ?? 0, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
+      result.value = { type: 'noul', keys: ['yes'], final: [a.noul as number], rows, ms: layers.ms ?? [], forwardMs: layers.timings?.forward_ms ?? 0, readoutMs: layers.timings?.readout_ms ?? 0, tokens_: layers.tokens ?? [], change: layers.token_change ?? [], attention: layers.attention ?? {}, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
     } else {
       const probs = a.probabilities as Record<string, number>
       const rows = (layers.probabilities ?? []).map((p) => (Array.isArray(p) ? p : null))
-      result.value = { type: 'choice', keys, final: keys.map((k) => probs[k]), rows, ms: layers.ms ?? [], forwardMs: layers.timings?.forward_ms ?? 0, readoutMs: layers.timings?.readout_ms ?? 0, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
+      result.value = { type: 'choice', keys, final: keys.map((k) => probs[k]), rows, ms: layers.ms ?? [], forwardMs: layers.timings?.forward_ms ?? 0, readoutMs: layers.timings?.readout_ms ?? 0, tokens_: layers.tokens ?? [], change: layers.token_change ?? [], attention: layers.attention ?? {}, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
     }
     if (!current.value.layers && !result.value.layersError) result.value.layersError = 'this model reads its answer from a pooled embedding, no layer curve yet'
-    if (!withLayers && !result.value.layersError) result.value.layersError = 'layers are off, switch them on and decide again'
   } catch (e) {
     error.value = String((e as Error).message ?? e)
   } finally {
@@ -169,7 +172,12 @@ const curve = computed(() => {
   }))
   const block = blocks[at]
   const ms = r.ms[at]
-  return { L, x, y, series, at, dotY: row ? y(row[best]) : null, p: row ? row[best] : null, best, strip, block, ms }
+  const g = ghost.value
+  const ghostD = g && g.rows.length === L && g.keys.length === r.keys.length
+    ? g.rows.map((row, i) => (row ? `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(row[best]).toFixed(1)}` : '')).filter(Boolean).join(' ')
+    : ''
+  const ghostP = g && ghostD ? g.final[best] : null
+  return { L, x, y, series, at, dotY: row ? y(row[best]) : null, p: row ? row[best] : null, best, strip, block, ms, ghostD, ghostP }
 })
 
 const svgEl = ref<SVGSVGElement | null>(null)
@@ -216,6 +224,94 @@ const replayNote = computed(() => {
 })
 const maxBytes = computed(() => (info.value ? Math.max(1, ...info.value.layers.map((l) => l.bytes)) : 1))
 const picked = computed(() => (info.value && pickedBlock.value !== null ? info.value.layers[pickedBlock.value] : null))
+const pickedHead = ref<number | null>(null)
+watch(pickedBlock, () => (pickedHead.value = null))
+
+// the body of the model: one row per block (top = out), one cell per token of your prompt, amber = how much
+// the block moved that token. Drawn on a canvas; a finger over it picks the block under it.
+const canvasEl = ref<HTMLCanvasElement | null>(null)
+const ROW_MIN = 7, ROW_PER_BYTE = 9
+const rows = computed(() => {
+  if (!info.value) return []
+  const mb = maxBytes.value
+  let y = 0
+  const out = [...info.value.layers].reverse().map((l) => {
+    const h = ROW_MIN + ROW_PER_BYTE * (l.bytes / mb)
+    const r = { i: l.i, kind: l.kind, head: l.decision_head, y, h }
+    y += h + 1
+    return r
+  })
+  return out
+})
+const bodyHeight = computed(() => (rows.value.length ? rows.value[rows.value.length - 1].y + rows.value[rows.value.length - 1].h : 0))
+function draw() {
+  const c = canvasEl.value
+  if (!c || !info.value) return
+  const dpr = window.devicePixelRatio || 1
+  const cssW = c.clientWidth || 400
+  const cssH = bodyHeight.value
+  c.width = Math.round(cssW * dpr); c.height = Math.round(cssH * dpr)
+  c.style.height = cssH + 'px'
+  const g = c.getContext('2d')!
+  g.setTransform(dpr, 0, 0, dpr, 0, 0)
+  g.clearRect(0, 0, cssW, cssH)
+  const r = result.value
+  const nTok = r && r.change.length ? r.tokens_.length : 0
+  const cw = nTok ? cssW / nTok : cssW
+  for (const row of rows.value) {
+    const dim = lit.value >= 0 && row.i > lit.value
+    const tint = row.head ? '61,189,125' : row.kind.startsWith('attention') ? '232,180,90' : '143,160,181'
+    g.fillStyle = `rgba(${tint},${dim ? 0.05 : 0.12})`
+    g.fillRect(0, row.y, cssW, row.h)
+    if (nTok && !dim) {
+      const ch = r!.change[row.i] ?? []
+      for (let t = 0; t < nTok; t++) {
+        const a = ch[t] ?? 0
+        if (a <= 0.02) continue
+        g.fillStyle = `rgba(232,180,90,${0.15 + 0.85 * a})`
+        g.fillRect(t * cw, row.y, Math.max(1, cw - 0.5), row.h)
+      }
+    }
+    if (pickedBlock.value === row.i) {
+      g.strokeStyle = '#e9eef5'; g.lineWidth = 1
+      g.strokeRect(0.5, row.y + 0.5, cssW - 1, row.h - 1)
+    }
+  }
+}
+watch([result, pickedBlock, lit, rows], () => nextTick(draw))
+watch(tab, (t) => { if (t === 'inside') nextTick(draw) })
+onMounted(() => window.addEventListener('resize', draw))
+let bodyDown = false
+function bodyPick(ev: PointerEvent) {
+  const c = canvasEl.value
+  if (!c) return
+  const y = ev.clientY - c.getBoundingClientRect().top
+  const row = rows.value.find((r) => y >= r.y && y < r.y + r.h + 1)
+  if (row) pickedBlock.value = row.i
+}
+function bodyDownFn(ev: PointerEvent) { bodyDown = true; bodyPick(ev) }
+function bodyMove(ev: PointerEvent) { if (bodyDown) bodyPick(ev) }
+function bodyUp() { bodyDown = false }
+
+// the heads of the picked attention block, and how sharply each one looked somewhere (its largest weight past the first token)
+const heads = computed(() => {
+  const r = result.value, b = picked.value
+  if (!r || !b || !b.kind.startsWith('attention')) return []
+  const hs = r.attention[String(b.i)]
+  if (!hs) return []
+  return hs.map((row, h) => ({ h, focus: Math.max(0, ...row.slice(1)) }))
+})
+// the prompt as the model reads it, each token shaded by the picked block (or head)
+const heat = computed(() => {
+  const r = result.value, b = picked.value
+  if (!r || !b || !r.tokens_.length) return []
+  let w: number[] | undefined
+  if (pickedHead.value !== null) w = r.attention[String(b.i)]?.[pickedHead.value]
+  if (!w) w = r.change[b.i]
+  if (!w) return []
+  const m = Math.max(1e-6, ...(pickedHead.value !== null ? w.slice(1) : w))
+  return r.tokens_.map((piece, t) => ({ piece, a: Math.min(1, w![t] / m) }))
+})
 const fmtM = (n: number) => (n >= 1e9 ? (n / 1e9).toFixed(2) + ' B' : (n / 1e6).toFixed(0) + ' M')
 const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
 </script>
@@ -257,7 +353,6 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
         <button class="tab" :class="{ on: tab === 'decide' }" @click="tab = 'decide'">answer</button>
         <button class="tab" :class="{ on: tab === 'layers' }" @click="tab = 'layers'">layers</button>
         <button class="tab" :class="{ on: tab === 'inside' }" @click="tab = 'inside'">inside</button>
-        <button class="tab sw" :class="{ on: wantLayers }" @click="wantLayers = !wantLayers" title="read every layer during decide">{{ wantLayers ? 'layers on' : 'layers off' }}</button>
       </nav>
 
       <section v-if="tab !== 'inside' && result" class="answer">
@@ -277,46 +372,41 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
             <rect v-for="b in curve.strip" :key="b.i" :x="b.x" :y="H - PB + 20 - b.h" :width="b.w" :height="b.h" rx="1.5" :fill="b.fill" :opacity="b.i === curve.at ? 1 : 0.55" />
             <text :x="PX" :y="H - 4" fill="#5c6b80" font-size="10">in</text>
             <text :x="W - PX" :y="H - 4" fill="#5c6b80" font-size="10" text-anchor="end">out</text>
+            <path v-if="curve.ghostD" :d="curve.ghostD" fill="none" stroke="#e8b45a" stroke-width="1.2" stroke-dasharray="2 4" opacity="0.6" />
             <path v-for="s in curve.series" :key="s.key" :d="s.d" fill="none" :stroke="s.win ? '#e8b45a' : '#8fa0b5'" :stroke-width="s.win ? 2.4 : 1.4" :stroke-dasharray="s.win ? undefined : '3 3'" />
             <line :x1="curve.x(curve.at)" :x2="curve.x(curve.at)" :y1="PT" :y2="H - PB" stroke="#e9eef5" stroke-width="1" stroke-dasharray="2 3" />
             <circle v-if="curve.dotY !== null" :cx="curve.x(curve.at)" :cy="curve.dotY" r="4" fill="#e8b45a" />
           </svg>
+          <p v-if="curve.ghostP !== null" class="note">dotted amber: the previous run, where this option ended at {{ curve.ghostP.toFixed(2) }}. Change a word and decide again to see what it does.</p>
           <p class="note">the strip is the model itself: grey short convolutions, amber attention, green the decision head, each as big as its weights. The curve above is what the output head would read after each block. Amber line: the final choice. Early blocks can mislead, the head was trained on the last one.</p>
         </template>
         <p v-else class="note">{{ result.layersError || 'no layer readout' }}</p>
       </section>
 
       <section v-if="tab === 'inside' && info" class="arch">
-        <dl class="facts">
-          <dt>model</dt><dd>{{ info.name }}</dd>
-          <dt>file</dt><dd>{{ info.model }} · {{ fmtMB(info.size_bytes) }}</dd>
-          <dt>params</dt><dd>{{ fmtM(info.n_params) }}</dd>
-          <dt>blocks</dt><dd>{{ info.n_layer }}<span v-if="info.n_layer_decision"> · {{ info.n_layer_decision }} in the decision head</span></dd>
-          <dt>width</dt><dd>{{ info.n_embd }} · {{ info.n_head }} heads</dd>
-          <dt>vocab</dt><dd>{{ info.n_vocab }} tokens · {{ info.n_ctx_train }} context</dd>
-          <dt>reads</dt><dd>{{ info.decision_type }}</dd>
-        </dl>
-        <p class="note">the blocks your text went through, bottom first, drawn to the size of their weights · tap one<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a>: {{ replayNote }}</template></p>
-        <div v-if="picked" class="expl">
-          <b>block {{ picked.i }} · {{ picked.kind === 'attention_swa' ? 'attention (window)' : picked.kind }}</b>
-          <span>{{ KIND_TEXT[picked.kind] }}</span>
-          <span v-if="picked.decision_head">One of the {{ info.n_layer_decision }} trailing blocks trained for answering. Everything below is the backbone it shares with the chat model.</span>
-          <span v-if="picked.kind.startsWith('attention')">{{ info.n_head }} heads of {{ Math.round(info.n_embd / info.n_head) }} numbers each, {{ info.n_head_kv }} key/value heads.</span>
-        </div>
         <div class="cap out">
           <span class="arr">↑</span>
           <span v-if="result">out · {{ result.keys.length }} score{{ result.keys.length > 1 ? 's' : '' }} ({{ result.type === 'noul' ? 'yes / no' : result.keys.join(' / ') }}) → softmax → {{ shown.find(o => o.win)?.key }} {{ shown.find(o => o.win)?.p.toFixed(2) }}</span>
           <span v-else>out · one score per option from the last position → softmax → the answer</span>
         </div>
-        <div class="stack">
-          <button v-for="l in [...info.layers].reverse()" :key="l.i" class="blk" :class="[l.kind, { head: l.decision_head, on: pickedBlock === l.i, lit: lit >= l.i }]" @click="pickedBlock = pickedBlock === l.i ? null : l.i">
-            <span class="i">{{ l.i }}</span><span class="k" :style="{ width: Math.max(8, (100 * l.bytes) / maxBytes) + '%' }"></span><span class="t">{{ fmtMB(l.bytes) }} · {{ l.kind === 'attention_swa' ? 'attention (window)' : l.kind }}{{ l.decision_head ? ' · head' : '' }}</span>
-          </button>
+        <div class="body">
+          <canvas ref="canvasEl" @pointerdown="bodyDownFn" @pointermove="bodyMove" @pointerup="bodyUp" @pointercancel="bodyUp" @pointerleave="bodyUp"></canvas>
         </div>
         <div class="cap in">
           <span class="arr">↑</span>
-          <span v-if="result">in · {{ result.tokens }} tokens × {{ info.n_embd }} numbers each = {{ (result.tokens * info.n_embd).toLocaleString() }} numbers for your text · embeddings {{ fmtMB(info.bytes_outside_blocks) }}</span>
+          <span v-if="result">in · {{ result.tokens }} tokens × {{ info.n_embd }} numbers each · embeddings {{ fmtMB(info.bytes_outside_blocks) }}</span>
           <span v-else>in · the text as tokens, {{ info.n_embd }} numbers each</span>
+        </div>
+        <p class="note">{{ info.name }} · {{ fmtM(info.n_params) }} params · {{ info.n_layer }} blocks, {{ info.n_layer_decision }} of them the decision head · {{ info.n_head }} heads · vocab {{ info.n_vocab }}. Rows are the blocks, as tall as their weights; columns are the tokens of your text; amber is how much the block moved each token. Drag a finger over it.<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a>: {{ replayNote }}</template></p>
+        <div v-if="picked" class="expl">
+          <b>block {{ picked.i }} · {{ picked.kind === 'attention_swa' ? 'attention (window)' : picked.kind }} · {{ fmtMB(picked.bytes) }}{{ picked.decision_head ? ' · decision head' : '' }}</b>
+          <span>{{ KIND_TEXT[picked.kind] }}<template v-if="picked.decision_head"> One of the {{ info.n_layer_decision }} trailing blocks trained for answering; below is the backbone shared with the chat model.</template></span>
+          <div v-if="heads.length" class="heads">
+            <button v-for="hd in heads" :key="hd.h" class="head" :class="{ on: pickedHead === hd.h }" :style="{ background: `rgba(232,180,90,${0.1 + 0.9 * hd.focus})` }" @click="pickedHead = pickedHead === hd.h ? null : hd.h" :title="'head ' + hd.h">{{ hd.h }}</button>
+            <span class="note">{{ heads.length }} heads of the last position · brighter = looked harder at one token · tap one</span>
+          </div>
+          <p v-if="heat.length" class="heat"><span v-for="(c, t) in heat" :key="t" :style="{ background: `rgba(232,180,90,${c.a * 0.85})` }">{{ c.piece }}</span></p>
+          <span v-if="heat.length" class="note">the prompt as the model reads it, shaded by {{ pickedHead !== null ? 'where head ' + pickedHead + ' looked from the last position' : 'how much this block moved each token' }}</span>
         </div>
       </section>
       <p v-else-if="tab === 'inside'" class="note">no model loaded</p>

@@ -60,8 +60,7 @@ textarea:focus, input:focus { outline: none; border-color: var(--accent); }
   padding: 5px 12px; font: inherit; font-size: 12px;
 }
 .tab.on { color: var(--accent); border-color: var(--accent); }
-.tab.sw { margin-left: auto; }
-.tab.sw.on { color: var(--live); border-color: var(--live); }
+
 
 .answer { display: grid; gap: 8px; }
 .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
@@ -131,3 +130,11 @@ svg { width: 100%; height: auto; display: block; touch-action: none; }
 }
 .run button:disabled { background: var(--line2); color: var(--muted); }
 .run button small { font-weight: 400; opacity: .75; }
+
+.body { width: 100%; }
+.body canvas { width: 100%; display: block; touch-action: none; border-radius: 6px; }
+.heads { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.head { width: 26px; height: 22px; border: 1px solid var(--line2); border-radius: 4px; color: #0b1018; font: 700 10px var(--mono); padding: 0; }
+.head.on { outline: 2px solid var(--ink); }
+.heat { margin: 0; font-size: 12px; line-height: 1.7; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.heat span { border-radius: 2px; }
