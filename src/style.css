@@ -160,3 +160,5 @@ svg { width: 100%; height: auto; display: block; touch-action: none; }
 .folded { display: grid; gap: 3px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; color: var(--ink); font: inherit; }
 .folded .st { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folded .q { font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.note.build { color: var(--faint); font-size: 10px; }

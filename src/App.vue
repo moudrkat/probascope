@@ -6,6 +6,8 @@ import { decide, download, isDownloaded, isNative, load, modelInfo, remove, type
 
 type Tab = 'answer' | 'layers' | 'inside'
 
+declare const __BUILD__: string
+const build = __BUILD__
 const tab = ref<Tab>('answer')
 const pickingModel = ref(false)
 const current = ref<ModelSpec | null>(null)
@@ -485,6 +487,8 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
       </section>
       <p v-else-if="tab === 'inside'" class="note">no model loaded</p>
     </template>
+
+    <p class="note build">probascope · build {{ build }}</p>
 
     <div class="run" v-if="current">
       <button id="run" :disabled="busy || !stateText.trim() || !question.trim()" @click="run">
