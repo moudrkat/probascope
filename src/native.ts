@@ -50,8 +50,10 @@ export async function load(spec: ModelSpec): Promise<{ modelType: string; repack
   const path = await modelPath(spec)
   let repack = true
   try {
+    // by the phone's total RAM, not what is free right now: Android keeps other apps' pages cached and evicts
+    // them when a model needs the room. Repacking doubles the file in RAM; leave the system 2 GB.
     const m = await Kneejerk.memory()
-    if (m.totalMem > 0 && m.availMem < spec.mb * 1e6 * 2.6) repack = false
+    if (m.totalMem > 0 && m.totalMem < spec.mb * 1e6 * 2.2 + 2e9) repack = false
   } catch {
     // older plugin: keep the default
   }
