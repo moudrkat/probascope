@@ -153,9 +153,8 @@ const curve = computed(() => {
   const x = (i: number) => PX + (iw * i) / Math.max(1, L - 1)
   const y = (v: number) => PT + ih * (1 - v)
   const best = r.final.indexOf(Math.max(...r.final))
-  // the winner is amber and solid; the others get their own colour and dash so they can be told apart
+  // the winner is amber and thicker; the others each get their own colour
   const palette = ['#6ea8fe', '#3dbd7d', '#c084fc', '#e5636b', '#8fa0b5']
-  const dashes = ['6 3', '2 3', '8 3 2 3', '4 2', '1 3']
   let other = 0
   const series = r.keys.map((k, j) => {
     const win = j === best
@@ -164,7 +163,7 @@ const curve = computed(() => {
       key: k,
       win,
       color: win ? '#e8b45a' : palette[n % palette.length],
-      dash: win ? undefined : dashes[n % dashes.length],
+      dash: undefined as string | undefined,
       final: r.final[j],
       d: r.rows.map((row, i) => (row ? `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(row[j]).toFixed(1)}` : '')).filter(Boolean).join(' '),
     }
