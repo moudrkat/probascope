@@ -20,7 +20,7 @@ text went through. Nothing leaves the phone.
 3. Pick a model: **d1 2B** (1.1 GB, the full picture) or **d1-omni 600M** (407 MB, fast).
 4. Text, question, two or more options (none = yes/no), **decide**.
 
-Pixel 8a: d1 2B about 0.5 s per decision.
+Pixel 8a, d1 2B: about 0.5 s per decision, 0.96 s with the look inside (forward 875 ms, readout 74 ms, 65 tokens).
 
 ## What you see
 
