@@ -133,14 +133,24 @@ async function run() {
   }
 }
 
+// one colour per option, the same in the bars, the curve and the legend: amber is the answer, the others get their own
+const OPTION_COLORS = ['#6ea8fe', '#c084fc', '#f472b6', '#2dd4bf', '#8fa0b5']
+const colors = computed(() => {
+  const r = result.value
+  if (!r) return []
+  const best = r.final.indexOf(Math.max(...r.final))
+  let n = 0
+  return r.keys.map((_, j) => (j === best ? '#e8b45a' : OPTION_COLORS[n++ % OPTION_COLORS.length]))
+})
+
 // what the bars show: the final answer, or the answer of the layer under the finger
 const shown = computed(() => {
   const r = result.value
   if (!r) return []
   const at = lensAt.value
   const p = at !== null && r.rows[at] ? r.rows[at]! : r.final
-  const best = p.indexOf(Math.max(...p))
-  return r.keys.map((k, i) => ({ key: k, p: p[i], win: i === best }))
+  const best = r.final.indexOf(Math.max(...r.final))
+  return r.keys.map((k, i) => ({ key: k, p: p[i], win: i === best, color: colors.value[i] }))
 })
 
 // the curve: one series per option, x = layer, y = probability
@@ -153,21 +163,13 @@ const curve = computed(() => {
   const x = (i: number) => PX + (iw * i) / Math.max(1, L - 1)
   const y = (v: number) => PT + ih * (1 - v)
   const best = r.final.indexOf(Math.max(...r.final))
-  // the winner is amber and thicker; the others each get their own colour
-  const palette = ['#6ea8fe', '#3dbd7d', '#c084fc', '#e5636b', '#8fa0b5']
-  let other = 0
-  const series = r.keys.map((k, j) => {
-    const win = j === best
-    const n = win ? 0 : other++
-    return {
-      key: k,
-      win,
-      color: win ? '#e8b45a' : palette[n % palette.length],
-      dash: undefined as string | undefined,
-      final: r.final[j],
-      d: r.rows.map((row, i) => (row ? `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(row[j]).toFixed(1)}` : '')).filter(Boolean).join(' '),
-    }
-  })
+  const series = r.keys.map((k, j) => ({
+    key: k,
+    win: j === best,
+    color: colors.value[j],
+    final: r.final[j],
+    d: r.rows.map((row, i) => (row ? `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(row[j]).toFixed(1)}` : '')).filter(Boolean).join(' '),
+  }))
   const at = lensAt.value ?? L - 1
   const row = r.rows[at]
   const blocks = (info.value?.layers ?? []).slice(0, L).map((l) => ({ i: l.i, kind: l.kind, head: l.decision_head, bytes: l.bytes }))
@@ -178,16 +180,21 @@ const curve = computed(() => {
     x: x(b.i) - slot * 0.42,
     w: slot * 0.84,
     h: 6 + 10 * (b.bytes / maxB),
-    fill: b.head ? '#3dbd7d' : b.kind.startsWith('attention') ? '#e8b45a' : '#2b3d5c',
+    fill: b.head ? '#3dbd7d' : b.kind.startsWith('attention') ? '#c7d2e0' : '#3a5078',
   }))
   const block = blocks[at]
   const ms = r.ms[at]
   const g = ghost.value
-  const ghostD = g && g.rows.length === L && g.keys.length === r.keys.length
-    ? g.rows.map((row, i) => (row ? `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(row[best]).toFixed(1)}` : '')).filter(Boolean).join(' ')
-    : ''
-  const ghostP = g && ghostD ? g.final[best] : null
-  return { L, x, y, series, at, dotY: row ? y(row[best]) : null, p: row ? row[best] : null, best, strip, block, ms, ghostD, ghostP }
+  const sameRun = g && g.rows.length === L && g.keys.join('\u0001') === r.keys.join('\u0001')
+  const ghosts = sameRun
+    ? r.keys.map((k, j) => ({
+        key: k,
+        color: colors.value[j],
+        final: g!.final[j],
+        d: g!.rows.map((row, i) => (row ? `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(row[j]).toFixed(1)}` : '')).filter(Boolean).join(' '),
+      }))
+    : []
+  return { L, x, y, series, at, dotY: row ? y(row[best]) : null, p: row ? row[best] : null, best, strip, block, ms, ghosts }
 })
 
 const svgEl = ref<SVGSVGElement | null>(null)
@@ -275,7 +282,7 @@ function draw() {
   g.textBaseline = 'middle'
   rows.value.forEach((row, k) => {
     const dim = lit.value >= 0 && row.i > lit.value
-    const tint = row.head ? '61,189,125' : row.kind.startsWith('attention') ? '232,180,90' : '143,160,181'
+    const tint = row.head ? '61,189,125' : row.kind.startsWith('attention') ? '199,210,224' : '58,80,120'
     const w = nTok ? work[k] / maxWork : 0.5
     const alpha = dim ? 0.06 : 0.14 + 0.5 * w
     g.fillStyle = `rgba(${tint},${alpha})`
@@ -285,7 +292,7 @@ function draw() {
       for (let t = 0; t < nTok; t++) {
         const a = ch[t] ?? 0
         if (a <= 0.02) continue
-        g.fillStyle = `rgba(232,180,90,${0.2 + 0.8 * a})`
+        g.fillStyle = `rgba(233,238,245,${0.15 + 0.85 * a})`
         g.fillRect(t * cw, row.y, Math.max(1, cw - 0.5), row.h)
       }
     }
@@ -387,8 +394,8 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
       <p v-if="tab === 'inside'" class="lead">the model itself: its blocks, and what each one did to your words</p>
       <section v-if="tab !== 'inside' && result" class="answer">
         <div v-for="o in shown" :key="o.key" class="row" :class="{ win: o.win }">
-          <span class="nm">{{ o.key }}</span><span class="p">{{ o.p.toFixed(2) }}</span>
-          <div class="bar"><span :style="{ width: o.p * 100 + '%' }"></span></div>
+          <span class="nm">{{ o.key }}</span><span class="p" :style="{ color: o.color }">{{ o.p.toFixed(2) }}</span>
+          <div class="bar"><span :style="{ width: o.p * 100 + '%', background: o.color }"></span></div>
         </div>
         <p class="note">{{ result.tokens }} tokens in, {{ result.wallMs.toFixed(0) }} ms, nothing left the phone<span v-if="lensAt !== null"> · shown as read after block {{ lensAt }}</span></p>
       </section>
@@ -402,14 +409,14 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
             <rect v-for="b in curve.strip" :key="b.i" :x="b.x" :y="H - PB + 20 - b.h" :width="b.w" :height="b.h" rx="1.5" :fill="b.fill" :opacity="b.i === curve.at ? 1 : 0.55" />
             <text :x="PX" :y="H - 4" fill="#5c6b80" font-size="10">in</text>
             <text :x="W - PX" :y="H - 4" fill="#5c6b80" font-size="10" text-anchor="end">out</text>
-            <path v-if="curve.ghostD" :d="curve.ghostD" fill="none" stroke="#e8b45a" stroke-width="1.2" stroke-dasharray="2 4" opacity="0.6" />
-            <path v-for="s in curve.series" :key="s.key" :d="s.d" fill="none" :stroke="s.color" :stroke-width="s.win ? 2.4 : 1.5" :stroke-dasharray="s.dash" />
+            <path v-for="gh in curve.ghosts" :key="'g' + gh.key" :d="gh.d" fill="none" :stroke="gh.color" stroke-width="1.2" stroke-dasharray="1.5 3.5" opacity="0.7" />
+            <path v-for="s in curve.series" :key="s.key" :d="s.d" fill="none" :stroke="s.color" :stroke-width="s.win ? 2.6 : 1.6" />
             <line :x1="curve.x(curve.at)" :x2="curve.x(curve.at)" :y1="PT" :y2="H - PB" stroke="#e9eef5" stroke-width="1" stroke-dasharray="2 3" />
             <circle v-if="curve.dotY !== null" :cx="curve.x(curve.at)" :cy="curve.dotY" r="4" fill="#e8b45a" />
           </svg>
           <div class="legend-lines">
-            <span v-for="s in curve.series" :key="s.key"><svg class="sw" viewBox="0 0 28 8"><line x1="1" x2="27" y1="4" y2="4" :stroke="s.color" :stroke-width="s.win ? 2.4 : 1.5" :stroke-dasharray="s.dash" /></svg>{{ s.key }} {{ s.final.toFixed(2) }}</span>
-            <span v-if="curve.ghostP !== null"><svg class="sw" viewBox="0 0 28 8"><line x1="1" x2="27" y1="4" y2="4" stroke="#e8b45a" stroke-width="1.2" stroke-dasharray="2 4" opacity="0.6" /></svg>previous run {{ curve.ghostP.toFixed(2) }}</span>
+            <span v-for="s in curve.series" :key="s.key"><svg class="sw" viewBox="0 0 28 8"><line x1="1" x2="27" y1="4" y2="4" :stroke="s.color" :stroke-width="s.win ? 2.6 : 1.6" /></svg>{{ s.key }} {{ s.final.toFixed(2) }}</span>
+            <span v-if="curve.ghosts.length"><svg class="sw" viewBox="0 0 28 8"><line x1="1" x2="27" y1="4" y2="4" stroke="#e9eef5" stroke-width="1.2" stroke-dasharray="1.5 3.5" opacity="0.7" /></svg>dotted: previous run</span>
           </div>
           <p class="note">each line: that option's probability read after each block · the strip below is the model, block by block</p>
         </template>
@@ -425,7 +432,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
         <div class="plate">
           <b>{{ info.name }}</b>
           <span>{{ fmtM(info.n_params) }} parameters · {{ info.n_layer }} blocks · {{ fmtMB(info.size_bytes) }} in your phone</span>
-          <span class="legend"><i class="c"></i> short convolution <i class="a"></i> attention <i class="h"></i> decision head · brighter = did more on this text</span>
+          <span class="legend"><i class="c"></i> short convolution <i class="a"></i> attention <i class="h"></i> decision head · white = how much it worked on each word</span>
         </div>
         <div class="body">
           <canvas ref="canvasEl" @pointerdown="bodyDownFn" @pointermove="bodyMove" @pointerup="bodyUp" @pointercancel="bodyUp" @pointerleave="bodyUp"></canvas>
@@ -440,10 +447,10 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <b>block {{ picked.i }} · {{ picked.kind === 'attention_swa' ? 'attention (window)' : picked.kind }} · {{ fmtMB(picked.bytes) }}{{ picked.decision_head ? ' · decision head' : '' }}</b>
           <span>{{ KIND_TEXT[picked.kind] }}<template v-if="picked.decision_head"> One of the {{ info.n_layer_decision }} trailing blocks trained for answering; below is the backbone shared with the chat model.</template></span>
           <div v-if="heads.length" class="heads">
-            <button v-for="hd in heads" :key="hd.h" class="head" :class="{ on: pickedHead === hd.h }" :style="{ background: `rgba(232,180,90,${0.1 + 0.9 * hd.focus})` }" @click="pickedHead = pickedHead === hd.h ? null : hd.h" :title="'head ' + hd.h">{{ hd.h }}</button>
+            <button v-for="hd in heads" :key="hd.h" class="head" :class="{ on: pickedHead === hd.h }" :style="{ background: `rgba(233,238,245,${0.08 + 0.92 * hd.focus})`, color: hd.focus > 0.5 ? '#0b1018' : '#8fa0b5' }" @click="pickedHead = pickedHead === hd.h ? null : hd.h" :title="'head ' + hd.h">{{ hd.h }}</button>
             <span class="note">its {{ heads.length }} attention heads · brighter = looked harder at one word · tap one</span>
           </div>
-          <p v-if="heat.length" class="heat"><span v-for="(c, t) in heat" :key="t" :style="{ background: `rgba(232,180,90,${c.a * 0.85})` }">{{ c.piece }}</span></p>
+          <p v-if="heat.length" class="heat"><span v-for="(c, t) in heat" :key="t" :style="{ background: `rgba(233,238,245,${c.a * 0.75})`, color: c.a > 0.55 ? '#0b1018' : undefined }">{{ c.piece }}</span></p>
           <span v-if="heat.length" class="note">{{ pickedHead !== null ? 'where head ' + pickedHead + ' looked' : 'the words this block changed most' }} · this is the exact text the model read, template included</span>
         </div>
       </section>

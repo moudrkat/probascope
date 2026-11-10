@@ -42,7 +42,7 @@ header { display: flex; justify-content: space-between; align-items: baseline; g
   font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px;
   padding: 3px 9px; white-space: nowrap; background: none; font-family: inherit;
 }
-.chip i { color: var(--live); font-style: normal; }
+.chip i { color: var(--ink); font-style: normal; }
 .chip.off i { color: var(--faint); }
 
 textarea, input {
@@ -67,10 +67,10 @@ textarea:focus, input:focus { outline: none; border-color: var(--accent); }
 .row .nm { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .row.win .nm { color: var(--ink); }
 .row .p { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
-.row.win .p { color: var(--accent); font-weight: 700; }
+.row.win .p { font-weight: 700; }
 .bar { grid-column: 1 / -1; height: 7px; border-radius: 4px; background: var(--panel); overflow: hidden; }
 .bar span { display: block; height: 100%; background: var(--line2); border-radius: 4px; transition: width .4s ease; }
-.row.win .bar span { background: var(--accent); }
+
 
 .trace { display: grid; gap: 6px; }
 .trace .hd { display: flex; justify-content: space-between; align-items: baseline; }
@@ -134,7 +134,7 @@ svg { width: 100%; height: auto; display: block; touch-action: none; }
 .body { width: 100%; }
 .body canvas { width: 100%; display: block; touch-action: none; border-radius: 6px; }
 .heads { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.head { width: 26px; height: 22px; border: 1px solid var(--line2); border-radius: 4px; color: #0b1018; font: 700 10px var(--mono); padding: 0; }
+.head { width: 26px; height: 22px; border: 1px solid var(--line2); border-radius: 4px; color: var(--muted); mix-blend-mode: normal; font: 700 10px var(--mono); padding: 0; }
 .head.on { outline: 2px solid var(--ink); }
 .heat { margin: 0; font-size: 12px; line-height: 1.7; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
 .heat span { border-radius: 2px; }
@@ -144,7 +144,7 @@ svg { width: 100%; height: auto; display: block; touch-action: none; }
 .plate span { font-size: 12px; color: var(--muted); }
 .plate .legend { font-size: 11px; color: var(--faint); }
 .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin: 0 3px 0 6px; vertical-align: -1px; }
-.legend i.c { background: #8fa0b5; } .legend i.a { background: #e8b45a; } .legend i.h { background: #3dbd7d; }
+.legend i.c { background: #3a5078; } .legend i.a { background: #c7d2e0; } .legend i.h { background: #3dbd7d; }
 .legend i:first-child { margin-left: 0; }
 
 .lead { margin: 0; font-size: 12px; color: var(--muted); }
