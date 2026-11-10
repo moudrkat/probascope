@@ -59,6 +59,10 @@ side of the plugin (Swift, Metal); a layer curve for a family that does not have
 `tests/layers.py` in kneejerk: the last block must reproduce the answer); a dozen Play testers
 when it is time. Keep it small and measured.
 
+**Add a model**: one entry in `src/models.ts` (name, the GGUF on Hugging Face, its size, one line of
+blurb, whether the layer curve works for its family), tried on a phone, with the ms in the PR.
+The model must be one llama.cpp knows as a decision model; the curve needs its readout in kneejerk.
+
 ## Not yet
 
 iOS (the library builds for it, the Swift binding does not exist), images and audio as the
