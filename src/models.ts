@@ -38,8 +38,8 @@ export const MODELS: ModelSpec[] = [
     file: 'd1-omni-600M-Q8_0.gguf',
     url: hf('LiquidAI/d1-omni-600M-GGUF', 'd1-omni-600M-Q8_0.gguf'),
     mb: 407,
-    blurb: 'Liquid AI, the smallest and fastest. Answers through its own decision head: no layer curve yet, the rest works.',
-    layers: false,
+    blurb: 'Liquid AI, the smallest and fastest. Answers through its own decision head; the curve re-runs that head on every block.',
+    layers: true,
   },
   {
     id: 'kev-0.8b',
