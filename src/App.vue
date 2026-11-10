@@ -426,7 +426,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <span class="nm">{{ o.key }}</span><span class="p" :style="{ color: o.color }">{{ o.p.toFixed(2) }}</span>
           <div class="bar"><span :style="{ width: o.p * 100 + '%', background: o.color }"></span></div>
         </div>
-        <p class="note">{{ result.tokens }} tokens in, {{ result.wallMs.toFixed(0) }} ms{{ result.rows.length ? ` (forward ${result.forwardMs.toFixed(0)}, readout ${result.readoutMs.toFixed(0)})` : '' }}, nothing left the phone<span v-if="lensAt !== null"> · shown as read after block {{ lensAt }}</span></p>
+        <p class="note">{{ result.tokens }} tokens in, {{ result.wallMs.toFixed(0) }} ms{{ result.rows.length ? ` (forward ${result.forwardMs.toFixed(0)}, readout ${result.readoutMs.toFixed(0)}; block 0 at ${(result.ms[0] ?? 0).toFixed(0)}, ${Math.floor(result.ms.length / 2)} at ${(result.ms[Math.floor(result.ms.length / 2)] ?? 0).toFixed(0)}, ${result.ms.length - 1} at ${(result.ms[result.ms.length - 1] ?? 0).toFixed(0)} ms)` : '' }}, nothing left the phone<span v-if="lensAt !== null"> · shown as read after block {{ lensAt }}</span></p>
       </section>
       <p v-else-if="tab !== 'inside'" class="note">paste a text, ask one question, give options (none = yes/no), tap decide</p>
 
