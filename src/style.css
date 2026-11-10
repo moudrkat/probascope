@@ -50,9 +50,9 @@ textarea, input {
   padding: 10px 12px; font: inherit; resize: vertical; min-width: 0;
 }
 textarea:focus, input:focus { outline: none; border-color: var(--accent); }
-.opts { display: flex; flex-wrap: wrap; gap: 6px; }
-.opts input { flex: 1 1 100px; padding: 6px 10px; font-size: 12px; }
-.opts button { border: 1px dashed var(--line2); background: none; color: var(--faint); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12px; }
+.opts { display: grid; gap: 6px; }
+.opts textarea { padding: 6px 10px; font-size: 13px; resize: none; overflow: hidden; line-height: 1.4; }
+.opts button { border: 1px dashed var(--line2); background: none; color: var(--faint); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 12px; justify-self: start; }
 
 .tabs { display: flex; gap: 6px; }
 .tab {

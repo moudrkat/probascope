@@ -81,6 +81,12 @@ async function forget(spec: ModelSpec) {
   }
 }
 
+// a field that grows downward with its text, so long options stay readable
+function grow(ev: Event) {
+  const el = ev.target as HTMLTextAreaElement
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
 function addOption() {
   if (options.value.length < 6) options.value.push('')
 }
@@ -243,7 +249,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
       <textarea id="state" v-model="stateText" rows="3" placeholder="paste anything"></textarea>
       <input id="question" v-model="question" placeholder="ask one question (no options = yes/no)">
       <div class="opts">
-        <input v-for="(_, i) in options" :key="i" v-model="options[i]" :placeholder="'option ' + (i + 1)" @keydown.backspace="options[i] === '' && dropOption(i)">
+        <textarea v-for="(_, i) in options" :key="i" v-model="options[i]" rows="1" :placeholder="'option ' + (i + 1)" @input="grow" @focus="grow" @keydown.backspace="options[i] === '' && dropOption(i)"></textarea>
         <button v-if="options.length < 6" @click="addOption">+</button>
       </div>
 
