@@ -241,7 +241,7 @@ const replayNote = computed(() => {
   const total = Math.max(...r.ms.map((v) => v ?? 0))
   return `${total.toFixed(0)} ms through ${r.ms.length} blocks`
 })
-const maxBytes = computed(() => (info.value ? Math.max(1, ...info.value.layers.map((l) => l.bytes)) : 1))
+const maxBytes = computed(() => (info.value ? Math.max(1, ...info.value.layers.map((l) => (Number.isFinite(l.bytes) ? l.bytes : 0))) : 1))
 const picked = computed(() => (info.value && pickedBlock.value !== null ? info.value.layers[pickedBlock.value] : null))
 const pickedHead = ref<number | null>(null)
 watch(pickedBlock, () => (pickedHead.value = null))
@@ -255,7 +255,7 @@ const rows = computed(() => {
   const mb = maxBytes.value
   let y = 0
   const out = [...info.value.layers].reverse().map((l) => {
-    const h = ROW_MIN + ROW_PER_BYTE * (l.bytes / mb)
+    const h = ROW_MIN + ROW_PER_BYTE * (Number.isFinite(l.bytes) ? l.bytes / mb : 0)
     const r = { i: l.i, kind: l.kind, head: l.decision_head, y, h }
     y += h + 1
     return r
@@ -267,8 +267,9 @@ function draw() {
   const c = canvasEl.value
   if (!c || !info.value) return
   const dpr = window.devicePixelRatio || 1
-  const cssW = c.clientWidth || 400
+  const cssW = c.clientWidth || c.parentElement?.clientWidth || 400
   const cssH = bodyHeight.value
+  if (!(cssH > 0)) return
   c.width = Math.round(cssW * dpr); c.height = Math.round(cssH * dpr)
   c.style.height = cssH + 'px'
   const g = c.getContext('2d')!
@@ -314,8 +315,16 @@ function draw() {
     }
   })
 }
-watch([result, pickedBlock, lit, rows], () => nextTick(draw))
-watch(tab, (t) => { if (t === 'inside') nextTick(draw) })
+const redraw = () => { nextTick(draw); requestAnimationFrame(draw); setTimeout(draw, 120) }
+watch([result, pickedBlock, lit, rows], redraw)
+watch(tab, (t) => { if (t === 'inside') redraw() })
+// the WebView may hand the canvas its size late: draw whenever it gets one
+let ro: ResizeObserver | null = null
+watch(canvasEl, (c) => {
+  if (ro) { ro.disconnect(); ro = null }
+  if (c && 'ResizeObserver' in window) { ro = new ResizeObserver(() => draw()); ro.observe(c) }
+  if (c) redraw()
+})
 onMounted(() => window.addEventListener('resize', draw))
 let bodyDown = false
 function bodyPick(ev: PointerEvent) {
@@ -460,6 +469,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <span v-if="result">in · your text as {{ result.tokens }} tokens, {{ info.n_embd }} numbers each</span>
           <span v-else>in · the text as tokens, {{ info.n_embd }} numbers each</span>
         </div>
+        <p v-if="!rows.length" class="err">the model reported no blocks</p>
         <p class="note">drag a finger over the blocks<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a> the pass, {{ replayNote }}</template></p>
           <p v-if="heat.length" class="heat"><span v-for="(c, t) in heat" :key="t" :style="{ background: `rgba(233,238,245,${c.a * 0.75})`, color: c.a > 0.55 ? '#0b1018' : undefined }">{{ c.piece }}</span></p>
           <span v-if="heat.length" class="note">{{ pickedHead !== null ? 'where head ' + pickedHead + ' looked' : 'the words this block changed most' }} · this is the exact text the model read, template included</span>
