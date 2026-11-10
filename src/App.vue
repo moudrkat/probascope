@@ -23,6 +23,8 @@ interface Result {
   final: number[]
   rows: (number[] | null)[]
   ms: (number | null)[]
+  forwardMs: number
+  readoutMs: number
   layersError: string
   wallMs: number
   tokens: number
@@ -103,15 +105,15 @@ async function run() {
     if (response.error) throw new Error((response.error as { message: string }).message)
     const answers = response.answers as Record<string, Record<string, unknown>>
     const a = answers.q
-    const layers = (a.layers ?? {}) as { error?: string; options?: string[]; probabilities?: (number[] | number | null)[]; ms?: (number | null)[] }
+    const layers = (a.layers ?? {}) as { error?: string; options?: string[]; probabilities?: (number[] | number | null)[]; ms?: (number | null)[]; timings?: { forward_ms: number; readout_ms: number } }
     const usage = response.usage as { input_tokens: number }
     if (a.type === 'noul') {
       const rows = (layers.probabilities ?? []).map((p) => (typeof p === 'number' ? [p] : null))
-      result.value = { type: 'noul', keys: ['yes'], final: [a.noul as number], rows, ms: layers.ms ?? [], layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
+      result.value = { type: 'noul', keys: ['yes'], final: [a.noul as number], rows, ms: layers.ms ?? [], forwardMs: layers.timings?.forward_ms ?? 0, readoutMs: layers.timings?.readout_ms ?? 0, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
     } else {
       const probs = a.probabilities as Record<string, number>
       const rows = (layers.probabilities ?? []).map((p) => (Array.isArray(p) ? p : null))
-      result.value = { type: 'choice', keys, final: keys.map((k) => probs[k]), rows, ms: layers.ms ?? [], layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
+      result.value = { type: 'choice', keys, final: keys.map((k) => probs[k]), rows, ms: layers.ms ?? [], forwardMs: layers.timings?.forward_ms ?? 0, readoutMs: layers.timings?.readout_ms ?? 0, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
     }
     if (!current.value.layers && !result.value.layersError) result.value.layersError = 'this model reads its answer from a pooled embedding, no layer curve yet'
     if (!withLayers && !result.value.layersError) result.value.layersError = 'layers are off, switch them on and decide again'
@@ -257,7 +259,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <span class="nm">{{ o.key }}</span><span class="p">{{ o.p.toFixed(2) }}</span>
           <div class="bar"><span :style="{ width: o.p * 100 + '%' }"></span></div>
         </div>
-        <p class="note">{{ result.tokens }} tokens · {{ result.wallMs.toFixed(0) }} ms{{ result.rows.length ? ' with layers' : '' }} · {{ modelType }}<span v-if="lensAt !== null"> · as read at layer {{ lensAt }}</span></p>
+        <p class="note">{{ result.tokens }} tokens · {{ result.wallMs.toFixed(0) }} ms{{ result.rows.length ? ` with layers (forward ${result.forwardMs.toFixed(0)}, readout ${result.readoutMs.toFixed(0)})` : '' }} · {{ modelType }}<span v-if="lensAt !== null"> · as read at layer {{ lensAt }}</span></p>
       </section>
       <p v-else-if="tab !== 'inside'" class="note">write a state and a question, then decide</p>
 
