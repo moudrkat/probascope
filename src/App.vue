@@ -3,9 +3,9 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MODELS, type ModelSpec } from './models'
 import { decide, download, isDownloaded, isNative, load, modelInfo, remove, type LayerInfo, type ModelInfo } from './native'
 
-type Tab = 'decide' | 'layers' | 'inside'
+type Tab = 'answer' | 'layers' | 'inside'
 
-const tab = ref<Tab>('decide')
+const tab = ref<Tab>('answer')
 const pickingModel = ref(false)
 const current = ref<ModelSpec | null>(null)
 const modelType = ref('')
@@ -220,7 +220,7 @@ const replayNote = computed(() => {
   const r = result.value
   if (!r || !r.ms.length) return ''
   const total = Math.max(...r.ms.map((v) => v ?? 0))
-  return `your text went through all ${r.ms.length} blocks in ${total.toFixed(0)} ms`
+  return `${total.toFixed(0)} ms through ${r.ms.length} blocks`
 })
 const maxBytes = computed(() => (info.value ? Math.max(1, ...info.value.layers.map((l) => l.bytes)) : 1))
 const picked = computed(() => (info.value && pickedBlock.value !== null ? info.value.layers[pickedBlock.value] : null))
@@ -367,19 +367,22 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
       </div>
 
       <nav class="tabs">
-        <button class="tab" :class="{ on: tab === 'decide' }" @click="tab = 'decide'">answer</button>
+        <button class="tab" :class="{ on: tab === 'answer' }" @click="tab = 'answer'">answer</button>
         <button class="tab" :class="{ on: tab === 'layers' }" @click="tab = 'layers'">layers</button>
         <button class="tab" :class="{ on: tab === 'inside' }" @click="tab = 'inside'">inside</button>
       </nav>
 
+      <p v-if="tab === 'answer'" class="lead">the answer: one probability per option, from one pass through the model in your phone</p>
+      <p v-if="tab === 'layers'" class="lead">the same answer read after every block: where it formed</p>
+      <p v-if="tab === 'inside'" class="lead">the model itself: its blocks, and what each one did to your words</p>
       <section v-if="tab !== 'inside' && result" class="answer">
         <div v-for="o in shown" :key="o.key" class="row" :class="{ win: o.win }">
           <span class="nm">{{ o.key }}</span><span class="p">{{ o.p.toFixed(2) }}</span>
           <div class="bar"><span :style="{ width: o.p * 100 + '%' }"></span></div>
         </div>
-        <p class="note">{{ result.tokens }} tokens · {{ result.wallMs.toFixed(0) }} ms{{ result.rows.length ? ` with layers (forward ${result.forwardMs.toFixed(0)}, readout ${result.readoutMs.toFixed(0)})` : '' }} · {{ modelType }}<span v-if="lensAt !== null"> · as read at layer {{ lensAt }}</span></p>
+        <p class="note">{{ result.tokens }} tokens in, {{ result.wallMs.toFixed(0) }} ms, nothing left the phone<span v-if="lensAt !== null"> · shown as read after block {{ lensAt }}</span></p>
       </section>
-      <p v-else-if="tab !== 'inside'" class="note">write a state and a question, then decide</p>
+      <p v-else-if="tab !== 'inside'" class="note">paste a text, ask one question, give options (none = yes/no), tap decide</p>
 
       <section v-if="tab === 'layers' && result" class="trace">
         <template v-if="curve">
@@ -394,8 +397,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
             <line :x1="curve.x(curve.at)" :x2="curve.x(curve.at)" :y1="PT" :y2="H - PB" stroke="#e9eef5" stroke-width="1" stroke-dasharray="2 3" />
             <circle v-if="curve.dotY !== null" :cx="curve.x(curve.at)" :cy="curve.dotY" r="4" fill="#e8b45a" />
           </svg>
-          <p v-if="curve.ghostP !== null" class="note">dotted amber: the previous run, where this option ended at {{ curve.ghostP.toFixed(2) }}. Change a word and decide again to see what it does.</p>
-          <p class="note">the strip is the model itself: grey short convolutions, amber attention, green the decision head, each as big as its weights. The curve above is what the output head would read after each block. Amber line: the final choice. Early blocks can mislead, the head was trained on the last one.</p>
+          <p class="note">amber: the winning option after each block · grey: the others · the strip below is the model, block by block<span v-if="curve.ghostP !== null"> · dotted: your previous run</span></p>
         </template>
         <p v-else class="note">{{ result.layersError || 'no layer readout' }}</p>
       </section>
@@ -419,16 +421,16 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <span v-if="result">in · {{ result.tokens }} tokens × {{ info.n_embd }} numbers each · embeddings {{ fmtMB(info.bytes_outside_blocks) }}</span>
           <span v-else>in · the text as tokens, {{ info.n_embd }} numbers each</span>
         </div>
-        <p class="note">tap or drag over a block: it lights up by the words it worked on, and the text below shows them<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a>: {{ replayNote }}</template></p>
+        <p class="note">drag a finger over the blocks<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a> the pass, {{ replayNote }}</template></p>
         <div v-if="picked" class="expl">
           <b>block {{ picked.i }} · {{ picked.kind === 'attention_swa' ? 'attention (window)' : picked.kind }} · {{ fmtMB(picked.bytes) }}{{ picked.decision_head ? ' · decision head' : '' }}</b>
           <span>{{ KIND_TEXT[picked.kind] }}<template v-if="picked.decision_head"> One of the {{ info.n_layer_decision }} trailing blocks trained for answering; below is the backbone shared with the chat model.</template></span>
           <div v-if="heads.length" class="heads">
             <button v-for="hd in heads" :key="hd.h" class="head" :class="{ on: pickedHead === hd.h }" :style="{ background: `rgba(232,180,90,${0.1 + 0.9 * hd.focus})` }" @click="pickedHead = pickedHead === hd.h ? null : hd.h" :title="'head ' + hd.h">{{ hd.h }}</button>
-            <span class="note">{{ heads.length }} heads of the last position · brighter = looked harder at one token · tap one</span>
+            <span class="note">its {{ heads.length }} attention heads · brighter = looked harder at one word · tap one</span>
           </div>
           <p v-if="heat.length" class="heat"><span v-for="(c, t) in heat" :key="t" :style="{ background: `rgba(232,180,90,${c.a * 0.85})` }">{{ c.piece }}</span></p>
-          <span v-if="heat.length" class="note">the prompt as the model reads it, shaded by {{ pickedHead !== null ? 'where head ' + pickedHead + ' looked from the last position' : 'how much this block moved each token' }}</span>
+          <span v-if="heat.length" class="note">{{ pickedHead !== null ? 'where head ' + pickedHead + ' looked' : 'the words this block changed most' }} · this is the exact text the model read, template included</span>
         </div>
       </section>
       <p v-else-if="tab === 'inside'" class="note">no model loaded</p>
