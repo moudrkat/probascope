@@ -15,21 +15,12 @@ const hf = (repo: string, file: string) => `https://huggingface.co/${repo}/resol
 
 export const MODELS: ModelSpec[] = [
   {
-    id: 'd1-omni-600m',
-    name: 'd1-omni 600M',
-    file: 'd1-omni-600M-Q8_0.gguf',
-    url: hf('LiquidAI/d1-omni-600M-GGUF', 'd1-omni-600M-Q8_0.gguf'),
-    mb: 407,
-    blurb: 'Liquid AI, the smallest and fastest. Answers through its own decision head, so no layer curve yet.',
-    layers: false,
-  },
-  {
     id: 'd1-2b',
     name: 'd1 2B',
     file: 'd1-2B-Q4_K_M.gguf',
     url: hf('LiquidAI/d1-2B-GGUF', 'd1-2B-Q4_K_M.gguf'),
     mb: 1100,
-    blurb: 'Liquid AI. The full layer curve, and the one to compare against. About 2 GB of RAM while loaded.',
+    blurb: 'Liquid AI. Start here: the full layer curve, the heads, the words. 1.1 GB download, about 2 GB of RAM while loaded.',
     layers: true,
   },
   {
@@ -40,6 +31,15 @@ export const MODELS: ModelSpec[] = [
     mb: 806,
     blurb: 'ggml-org, a different family. The full layer curve, 806 MB, non-causal attention.',
     layers: true,
+  },
+  {
+    id: 'd1-omni-600m',
+    name: 'd1-omni 600M',
+    file: 'd1-omni-600M-Q8_0.gguf',
+    url: hf('LiquidAI/d1-omni-600M-GGUF', 'd1-omni-600M-Q8_0.gguf'),
+    mb: 407,
+    blurb: 'Liquid AI, the smallest and fastest. Answers through its own decision head: no layer curve yet, the rest works.',
+    layers: false,
   },
   {
     id: 'kev-0.8b',
