@@ -252,16 +252,16 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <dt>reads</dt><dd>{{ info.decision_type }}</dd>
         </dl>
         <p class="note">the blocks your text went through, bottom first · tap one</p>
-        <div class="stack">
-          <button v-for="l in [...info.layers].reverse()" :key="l.i" class="blk" :class="[l.kind, { head: l.decision_head, on: pickedBlock === l.i }]" @click="pickedBlock = pickedBlock === l.i ? null : l.i">
-            <span class="i">{{ l.i }}</span><span class="k"></span><span class="t">{{ l.kind === 'attention_swa' ? 'attention (window)' : l.kind }}{{ l.decision_head ? ' · head' : '' }}</span>
-          </button>
-        </div>
         <div v-if="picked" class="expl">
           <b>block {{ picked.i }} · {{ picked.kind === 'attention_swa' ? 'attention (window)' : picked.kind }}</b>
           <span>{{ KIND_TEXT[picked.kind] }}</span>
           <span v-if="picked.decision_head">One of the {{ info.n_layer_decision }} trailing blocks trained for answering. Everything below is the backbone it shares with the chat model.</span>
           <span v-if="picked.kind.startsWith('attention')">{{ info.n_head }} heads of {{ Math.round(info.n_embd / info.n_head) }} numbers each, {{ info.n_head_kv }} key/value heads.</span>
+        </div>
+        <div class="stack">
+          <button v-for="l in [...info.layers].reverse()" :key="l.i" class="blk" :class="[l.kind, { head: l.decision_head, on: pickedBlock === l.i }]" @click="pickedBlock = pickedBlock === l.i ? null : l.i">
+            <span class="i">{{ l.i }}</span><span class="k"></span><span class="t">{{ l.kind === 'attention_swa' ? 'attention (window)' : l.kind }}{{ l.decision_head ? ' · head' : '' }}</span>
+          </button>
         </div>
       </section>
       <p v-else-if="tab === 'inside'" class="note">no model loaded</p>
