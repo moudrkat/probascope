@@ -133,7 +133,7 @@ const shown = computed(() => {
 })
 
 // the curve: one series per option, x = layer, y = probability
-const W = 448, H = 150, PX = 8, PT = 8, PB = 22
+const W = 448, H = 170, PX = 8, PT = 8, PB = 42 // PB holds the block strip and the axis labels
 const curve = computed(() => {
   const r = result.value
   if (!r || r.layersError || !r.rows.length) return null
@@ -149,7 +149,19 @@ const curve = computed(() => {
   }))
   const at = lensAt.value ?? L - 1
   const row = r.rows[at]
-  return { L, x, y, series, at, dotY: row ? y(row[best]) : null, p: row ? row[best] : null, best }
+  const blocks = (info.value?.layers ?? []).slice(0, L).map((l) => ({ i: l.i, kind: l.kind, head: l.decision_head, bytes: l.bytes }))
+  const maxB = Math.max(1, ...blocks.map((b) => b.bytes))
+  const slot = iw / Math.max(1, L - 1)
+  const strip = blocks.map((b) => ({
+    ...b,
+    x: x(b.i) - slot * 0.42,
+    w: slot * 0.84,
+    h: 6 + 10 * (b.bytes / maxB),
+    fill: b.head ? '#3dbd7d' : b.kind.startsWith('attention') ? '#e8b45a' : '#2b3d5c',
+  }))
+  const block = blocks[at]
+  const ms = r.ms[at]
+  return { L, x, y, series, at, dotY: row ? y(row[best]) : null, p: row ? row[best] : null, best, strip, block, ms }
 })
 
 const svgEl = ref<SVGSVGElement | null>(null)
@@ -251,16 +263,17 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
 
       <section v-if="tab === 'layers' && result" class="trace">
         <template v-if="curve">
-          <div class="hd"><span>drag: where it decided</span><span class="at">layer {{ curve.at }} · {{ curve.p !== null ? curve.p.toFixed(2) : '–' }}</span></div>
+          <div class="hd"><span>drag over the model</span><span class="at">block {{ curve.at }}<template v-if="curve.block"> · {{ curve.block.head ? 'head' : curve.block.kind === 'attention_swa' ? 'attention' : curve.block.kind }}</template> · {{ curve.p !== null ? curve.p.toFixed(2) : '–' }}<template v-if="curve.ms != null"> · {{ curve.ms.toFixed(0) }} ms</template></span></div>
           <svg ref="svgEl" :viewBox="`0 0 ${W} ${H}`" @pointerdown="down" @pointermove="move" @pointerup="up" @pointercancel="up" @pointerleave="up">
             <line v-for="v in [0, 0.5, 1]" :key="v" :x1="PX" :x2="W - PX" :y1="curve.y(v)" :y2="curve.y(v)" stroke="#1d2b42" stroke-width="1" />
-            <text :x="PX" :y="H - 6" fill="#5c6b80" font-size="10">0</text>
-            <text :x="W - PX" :y="H - 6" fill="#5c6b80" font-size="10" text-anchor="end">layer {{ curve.L - 1 }}</text>
+            <rect v-for="b in curve.strip" :key="b.i" :x="b.x" :y="H - PB + 20 - b.h" :width="b.w" :height="b.h" rx="1.5" :fill="b.fill" :opacity="b.i === curve.at ? 1 : 0.55" />
+            <text :x="PX" :y="H - 4" fill="#5c6b80" font-size="10">in</text>
+            <text :x="W - PX" :y="H - 4" fill="#5c6b80" font-size="10" text-anchor="end">out</text>
             <path v-for="s in curve.series" :key="s.key" :d="s.d" fill="none" :stroke="s.win ? '#e8b45a' : '#8fa0b5'" :stroke-width="s.win ? 2.4 : 1.4" :stroke-dasharray="s.win ? undefined : '3 3'" />
             <line :x1="curve.x(curve.at)" :x2="curve.x(curve.at)" :y1="PT" :y2="H - PB" stroke="#e9eef5" stroke-width="1" stroke-dasharray="2 3" />
             <circle v-if="curve.dotY !== null" :cx="curve.x(curve.at)" :cy="curve.dotY" r="4" fill="#e8b45a" />
           </svg>
-          <p class="note">each point: what the output head reads from that layer. Amber is the final choice. Early layers can mislead: the head was trained on the last one.</p>
+          <p class="note">the strip is the model itself: grey short convolutions, amber attention, green the decision head, each as big as its weights. The curve above is what the output head would read after each block. Amber line: the final choice. Early blocks can mislead, the head was trained on the last one.</p>
         </template>
         <p v-else class="note">{{ result.layersError || 'no layer readout' }}</p>
       </section>
