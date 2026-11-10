@@ -13,9 +13,9 @@ const info = ref<ModelInfo | null>(null)
 const status = reactive<Record<string, { downloaded: boolean; progress: number | null; loading: boolean }>>({})
 const error = ref('')
 
-const stateText = ref('is the dentist open on Saturday? never mind, the tooth just fell out')
+const stateText = ref('order cat food, the usual. actually the cat just ordered it herself, she has my phone')
 const question = ref('What should the agent do next?')
-const options = ref<string[]>(['book an appointment', 'just reply', 'ask what they meant'])
+const options = ref<string[]>(['place the order', 'just reply', 'escalate to a human'])
 
 interface Result {
   type: 'choice' | 'noul'
