@@ -8,6 +8,11 @@ llama.cpp in the app, no server). Paste a text, ask one question, get probabilit
 milliseconds. Then drag over the layers to see where the answer formed, and tap the blocks your
 text went through. Nothing leaves the phone.
 
+<p align="center">
+  <img src="docs/layers.png" width="300" alt="layers: the answer read after every block of d1 2B, on a Pixel 8a">
+  <img src="docs/models.png" width="300" alt="the models, downloaded inside the app">
+</p>
+
 ## Install
 
 1. On the phone, open the [releases page](https://github.com/moudrkat/probascope/releases), tap `probascope.apk`.
