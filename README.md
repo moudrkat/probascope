@@ -17,7 +17,7 @@ released open ones (d1), llama.cpp runs them. Nobody had looked inside one on a 
 
 Android only for now. The APK is about 30 MB; the models download inside the app.
 
-1. On the phone, open the [latest release](https://github.com/moudrkat/probascope/releases/latest)
+1. On the phone, open the [releases page](https://github.com/moudrkat/probascope/releases)
    and tap `probascope.apk`.
 2. Android asks to allow installs from this source (your browser). Allow it, then install.
 3. Open probascope, pick a model. **d1-omni 600M** (407 MB) is the quick first one,
