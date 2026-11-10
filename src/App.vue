@@ -34,6 +34,7 @@ interface Result {
   tokens: number
 }
 const result = ref<Result | null>(null)
+const lookInside = ref(true) // off = a plain decision, faster; no layers and no inside
 const editing = ref(true) // the inputs fold into one line after a decision; tap to edit again
 const ghost = ref<Result | null>(null) // the previous run, drawn dashed under the new curve
 const busy = ref(false)
@@ -111,7 +112,7 @@ async function run() {
       keys.length >= 2
         ? { type: 'choice', instructions: question.value, criteria: Object.fromEntries(keys.map((k) => [k, k])) }
         : { type: 'noul', instructions: question.value }
-    const withLayers = current.value.layers
+    const withLayers = current.value.layers && lookInside.value
     const request = { state: stateText.value, questions: { q }, layers: withLayers }
     const { response, wallMs } = await decide(request)
     if (response.error) throw new Error((response.error as { message: string }).message)
@@ -128,6 +129,7 @@ async function run() {
       result.value = { type: 'choice', keys, final: keys.map((k) => probs[k]), rows, ms: layers.ms ?? [], forwardMs: layers.timings?.forward_ms ?? 0, readoutMs: layers.timings?.readout_ms ?? 0, tokens_: layers.tokens ?? [], change: layers.token_change ?? [], attention: layers.attention ?? {}, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
     }
     if (!current.value.layers && !result.value.layersError) result.value.layersError = 'no layer curve for this model yet'
+    if (!lookInside.value && !result.value.layersError) result.value.layersError = 'looking inside is off; switch it on and decide again'
     editing.value = false
   } catch (e) {
     error.value = String((e as Error).message ?? e)
@@ -407,6 +409,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
         <button class="tab" :class="{ on: tab === 'answer' }" @click="tab = 'answer'">answer</button>
         <button class="tab" :class="{ on: tab === 'layers' }" @click="tab = 'layers'">layers</button>
         <button class="tab" :class="{ on: tab === 'inside' }" @click="tab = 'inside'">inside</button>
+        <button class="tab sw" :class="{ on: lookInside }" @click="lookInside = !lookInside" title="read every block during decide">{{ lookInside ? 'look inside: on' : 'look inside: off, faster' }}</button>
       </nav>
 
       <p v-if="tab === 'answer'" class="lead">the answer: one probability per option, from one pass through the model in your phone</p>
