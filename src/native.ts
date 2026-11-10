@@ -67,6 +67,7 @@ export interface LayerInfo {
   i: number
   kind: 'shortconv' | 'recurrent' | 'attention' | 'attention_swa'
   decision_head: boolean
+  bytes: number
 }
 
 export interface ModelInfo {
@@ -85,6 +86,7 @@ export interface ModelInfo {
   n_vocab: number
   n_ctx_train: number
   n_ctx: number
+  bytes_outside_blocks: number
   layers: LayerInfo[]
 }
 

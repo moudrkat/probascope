@@ -102,7 +102,9 @@ svg { width: 100%; height: auto; display: block; touch-action: none; }
   color: var(--muted); font: inherit; font-size: 12px; text-align: left;
 }
 .blk .i { color: var(--faint); font-variant-numeric: tabular-nums; }
-.blk .k { height: 8px; border-radius: 2px; background: var(--line2); }
+.blk .k { height: 8px; border-radius: 2px; background: var(--line2); justify-self: start; transition: background .15s; }
+.blk.lit { border-color: var(--accent); color: var(--ink); }
+.blk.lit .k { background: var(--accent); }
 .blk.attention .k, .blk.attention_swa .k { background: var(--accent); }
 .blk.head { border-color: var(--line2); }
 .blk.head .k { background: var(--live); }

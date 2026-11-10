@@ -22,6 +22,7 @@ interface Result {
   keys: string[]
   final: number[]
   rows: (number[] | null)[]
+  ms: (number | null)[]
   layersError: string
   wallMs: number
   tokens: number
@@ -102,15 +103,15 @@ async function run() {
     if (response.error) throw new Error((response.error as { message: string }).message)
     const answers = response.answers as Record<string, Record<string, unknown>>
     const a = answers.q
-    const layers = (a.layers ?? {}) as { error?: string; options?: string[]; probabilities?: (number[] | number | null)[] }
+    const layers = (a.layers ?? {}) as { error?: string; options?: string[]; probabilities?: (number[] | number | null)[]; ms?: (number | null)[] }
     const usage = response.usage as { input_tokens: number }
     if (a.type === 'noul') {
       const rows = (layers.probabilities ?? []).map((p) => (typeof p === 'number' ? [p] : null))
-      result.value = { type: 'noul', keys: ['yes'], final: [a.noul as number], rows, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
+      result.value = { type: 'noul', keys: ['yes'], final: [a.noul as number], rows, ms: layers.ms ?? [], layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
     } else {
       const probs = a.probabilities as Record<string, number>
       const rows = (layers.probabilities ?? []).map((p) => (Array.isArray(p) ? p : null))
-      result.value = { type: 'choice', keys, final: keys.map((k) => probs[k]), rows, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
+      result.value = { type: 'choice', keys, final: keys.map((k) => probs[k]), rows, ms: layers.ms ?? [], layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
     }
     if (!current.value.layers && !result.value.layersError) result.value.layersError = 'this model reads its answer from a pooled embedding, no layer curve yet'
     if (!withLayers && !result.value.layersError) result.value.layersError = 'layers are off, switch them on and decide again'
@@ -171,6 +172,29 @@ const KIND_TEXT: Record<LayerInfo['kind'], string> = {
   attention: 'Attention. Every word can read any earlier word in the whole text. This is where distant words meet.',
   attention_swa: 'Sliding-window attention. Every word reads a window of earlier words, not the whole text.',
 }
+// replay: the blocks light up in the order and tempo your phone computed them (stretched to at least 2 s)
+const lit = ref<number>(-1)
+let replayTimer: ReturnType<typeof setTimeout> | null = null
+function replay() {
+  const r = result.value
+  if (!r || !r.ms.length) return
+  if (replayTimer) clearTimeout(replayTimer)
+  const ms = r.ms.map((v) => v ?? 0)
+  const total = Math.max(...ms)
+  const scale = total > 0 ? Math.max(1, 2000 / total) : 1
+  lit.value = -1
+  ms.forEach((t, i) => {
+    setTimeout(() => (lit.value = i), t * scale)
+  })
+  replayTimer = setTimeout(() => (lit.value = -1), total * scale + 1500)
+}
+const replayNote = computed(() => {
+  const r = result.value
+  if (!r || !r.ms.length) return ''
+  const total = Math.max(...r.ms.map((v) => v ?? 0))
+  return `your text went through all ${r.ms.length} blocks in ${total.toFixed(0)} ms`
+})
+const maxBytes = computed(() => (info.value ? Math.max(1, ...info.value.layers.map((l) => l.bytes)) : 1))
 const picked = computed(() => (info.value && pickedBlock.value !== null ? info.value.layers[pickedBlock.value] : null))
 const fmtM = (n: number) => (n >= 1e9 ? (n / 1e9).toFixed(2) + ' B' : (n / 1e6).toFixed(0) + ' M')
 const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
@@ -251,7 +275,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <dt>vocab</dt><dd>{{ info.n_vocab }} tokens · {{ info.n_ctx_train }} context</dd>
           <dt>reads</dt><dd>{{ info.decision_type }}</dd>
         </dl>
-        <p class="note">the blocks your text went through, bottom first · tap one</p>
+        <p class="note">the blocks your text went through, bottom first, drawn to the size of their weights · tap one<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a>: {{ replayNote }}</template></p>
         <div v-if="picked" class="expl">
           <b>block {{ picked.i }} · {{ picked.kind === 'attention_swa' ? 'attention (window)' : picked.kind }}</b>
           <span>{{ KIND_TEXT[picked.kind] }}</span>
@@ -264,13 +288,13 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <span v-else>out · one score per option from the last position → softmax → the answer</span>
         </div>
         <div class="stack">
-          <button v-for="l in [...info.layers].reverse()" :key="l.i" class="blk" :class="[l.kind, { head: l.decision_head, on: pickedBlock === l.i }]" @click="pickedBlock = pickedBlock === l.i ? null : l.i">
-            <span class="i">{{ l.i }}</span><span class="k"></span><span class="t">{{ l.kind === 'attention_swa' ? 'attention (window)' : l.kind }}{{ l.decision_head ? ' · head' : '' }}</span>
+          <button v-for="l in [...info.layers].reverse()" :key="l.i" class="blk" :class="[l.kind, { head: l.decision_head, on: pickedBlock === l.i, lit: lit >= l.i }]" @click="pickedBlock = pickedBlock === l.i ? null : l.i">
+            <span class="i">{{ l.i }}</span><span class="k" :style="{ width: Math.max(8, (100 * l.bytes) / maxBytes) + '%' }"></span><span class="t">{{ fmtMB(l.bytes) }} · {{ l.kind === 'attention_swa' ? 'attention (window)' : l.kind }}{{ l.decision_head ? ' · head' : '' }}</span>
           </button>
         </div>
         <div class="cap in">
           <span class="arr">↑</span>
-          <span v-if="result">in · {{ result.tokens }} tokens × {{ info.n_embd }} numbers each = {{ (result.tokens * info.n_embd).toLocaleString() }} numbers for your text</span>
+          <span v-if="result">in · {{ result.tokens }} tokens × {{ info.n_embd }} numbers each = {{ (result.tokens * info.n_embd).toLocaleString() }} numbers for your text · embeddings {{ fmtMB(info.bytes_outside_blocks) }}</span>
           <span v-else>in · the text as tokens, {{ info.n_embd }} numbers each</span>
         </div>
       </section>
