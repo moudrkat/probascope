@@ -52,6 +52,13 @@ cd android && ./gradlew assembleDebug      # app/build/outputs/apk/debug/app-deb
 The plugin is `kneejerk/bindings/capacitor`, linked as a `file:` dependency; the Gradle build
 cross-compiles llama.cpp for arm64 into the APK.
 
+## PRs welcome
+
+What would help most, in order: numbers from your phone (model, ms, RAM) in the table; the iOS
+side of the plugin (Swift, Metal); a layer curve for a family that does not have one yet (see
+`tests/layers.py` in kneejerk: the last block must reproduce the answer); a dozen Play testers
+when it is time. Keep it small and measured.
+
 ## Not yet
 
 iOS (the library builds for it, the Swift binding does not exist), images and audio as the
