@@ -138,3 +138,11 @@ svg { width: 100%; height: auto; display: block; touch-action: none; }
 .head.on { outline: 2px solid var(--ink); }
 .heat { margin: 0; font-size: 12px; line-height: 1.7; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
 .heat span { border-radius: 2px; }
+
+.plate { display: grid; gap: 2px; padding: 2px 0 4px; }
+.plate b { font-size: 17px; color: var(--ink); }
+.plate span { font-size: 12px; color: var(--muted); }
+.plate .legend { font-size: 11px; color: var(--faint); }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin: 0 3px 0 6px; vertical-align: -1px; }
+.legend i.c { background: #8fa0b5; } .legend i.a { background: #e8b45a; } .legend i.h { background: #3dbd7d; }
+.legend i:first-child { margin-left: 0; }

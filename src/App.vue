@@ -230,7 +230,7 @@ watch(pickedBlock, () => (pickedHead.value = null))
 // the body of the model: one row per block (top = out), one cell per token of your prompt, amber = how much
 // the block moved that token. Drawn on a canvas; a finger over it picks the block under it.
 const canvasEl = ref<HTMLCanvasElement | null>(null)
-const ROW_MIN = 7, ROW_PER_BYTE = 9
+const ROW_MIN = 16, ROW_PER_BYTE = 14
 const rows = computed(() => {
   if (!info.value) return []
   const mb = maxBytes.value
@@ -258,25 +258,42 @@ function draw() {
   const r = result.value
   const nTok = r && r.change.length ? r.tokens_.length : 0
   const cw = nTok ? cssW / nTok : cssW
-  for (const row of rows.value) {
+  // how much work each block did on this text: its mean move over the tokens, scaled to the busiest block
+  const work = rows.value.map((row) => (nTok ? (r!.change[row.i] ?? []).reduce((a, b) => a + b, 0) / nTok : 0))
+  const maxWork = Math.max(1e-6, ...work)
+  g.font = '600 10px ui-monospace, Menlo, Consolas, monospace'
+  g.textBaseline = 'middle'
+  rows.value.forEach((row, k) => {
     const dim = lit.value >= 0 && row.i > lit.value
     const tint = row.head ? '61,189,125' : row.kind.startsWith('attention') ? '232,180,90' : '143,160,181'
-    g.fillStyle = `rgba(${tint},${dim ? 0.05 : 0.12})`
+    const w = nTok ? work[k] / maxWork : 0.5
+    const alpha = dim ? 0.06 : 0.14 + 0.5 * w
+    g.fillStyle = `rgba(${tint},${alpha})`
     g.fillRect(0, row.y, cssW, row.h)
-    if (nTok && !dim) {
+    if (nTok && pickedBlock.value === row.i) {
       const ch = r!.change[row.i] ?? []
       for (let t = 0; t < nTok; t++) {
         const a = ch[t] ?? 0
         if (a <= 0.02) continue
-        g.fillStyle = `rgba(232,180,90,${0.15 + 0.85 * a})`
+        g.fillStyle = `rgba(232,180,90,${0.2 + 0.8 * a})`
         g.fillRect(t * cw, row.y, Math.max(1, cw - 0.5), row.h)
       }
     }
+    const label = `#${row.i} ${row.head ? 'decision head' : row.kind.startsWith('attention') ? 'attention' : row.kind === 'shortconv' ? 'short conv' : row.kind}`
+    g.fillStyle = pickedBlock.value === row.i ? '#0b1018' : 'rgba(233,238,245,0.85)'
     if (pickedBlock.value === row.i) {
-      g.strokeStyle = '#e9eef5'; g.lineWidth = 1
-      g.strokeRect(0.5, row.y + 0.5, cssW - 1, row.h - 1)
+      // a plate behind the label so it stays readable over the heat
+      const tw = g.measureText(label).width + 10
+      g.fillStyle = 'rgba(233,238,245,0.92)'
+      g.fillRect(4, row.y + row.h / 2 - 7, tw, 14)
+      g.fillStyle = '#0b1018'
     }
-  }
+    g.fillText(label, 9, row.y + row.h / 2 + 0.5)
+    if (pickedBlock.value === row.i) {
+      g.strokeStyle = '#e9eef5'; g.lineWidth = 1.5
+      g.strokeRect(0.75, row.y + 0.75, cssW - 1.5, row.h - 1.5)
+    }
+  })
 }
 watch([result, pickedBlock, lit, rows], () => nextTick(draw))
 watch(tab, (t) => { if (t === 'inside') nextTick(draw) })
@@ -389,6 +406,11 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <span v-if="result">out · {{ result.keys.length }} score{{ result.keys.length > 1 ? 's' : '' }} ({{ result.type === 'noul' ? 'yes / no' : result.keys.join(' / ') }}) → softmax → {{ shown.find(o => o.win)?.key }} {{ shown.find(o => o.win)?.p.toFixed(2) }}</span>
           <span v-else>out · one score per option from the last position → softmax → the answer</span>
         </div>
+        <div class="plate">
+          <b>{{ info.name }}</b>
+          <span>{{ fmtM(info.n_params) }} parameters · {{ info.n_layer }} blocks · {{ fmtMB(info.size_bytes) }} in your phone</span>
+          <span class="legend"><i class="c"></i> short convolution <i class="a"></i> attention <i class="h"></i> decision head · brighter = did more on this text</span>
+        </div>
         <div class="body">
           <canvas ref="canvasEl" @pointerdown="bodyDownFn" @pointermove="bodyMove" @pointerup="bodyUp" @pointercancel="bodyUp" @pointerleave="bodyUp"></canvas>
         </div>
@@ -397,7 +419,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <span v-if="result">in · {{ result.tokens }} tokens × {{ info.n_embd }} numbers each · embeddings {{ fmtMB(info.bytes_outside_blocks) }}</span>
           <span v-else>in · the text as tokens, {{ info.n_embd }} numbers each</span>
         </div>
-        <p class="note">{{ info.name }} · {{ fmtM(info.n_params) }} params · {{ info.n_layer }} blocks, {{ info.n_layer_decision }} of them the decision head · {{ info.n_head }} heads · vocab {{ info.n_vocab }}. Rows are the blocks, as tall as their weights; columns are the tokens of your text; amber is how much the block moved each token. Drag a finger over it.<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a>: {{ replayNote }}</template></p>
+        <p class="note">tap or drag over a block: it lights up by the words it worked on, and the text below shows them<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a>: {{ replayNote }}</template></p>
         <div v-if="picked" class="expl">
           <b>block {{ picked.i }} · {{ picked.kind === 'attention_swa' ? 'attention (window)' : picked.kind }} · {{ fmtMB(picked.bytes) }}{{ picked.decision_head ? ' · decision head' : '' }}</b>
           <span>{{ KIND_TEXT[picked.kind] }}<template v-if="picked.decision_head"> One of the {{ info.n_layer_decision }} trailing blocks trained for answering; below is the backbone shared with the chat model.</template></span>
