@@ -20,8 +20,8 @@ export const MODELS: ModelSpec[] = [
     file: 'd1-omni-600M-Q8_0.gguf',
     url: hf('LiquidAI/d1-omni-600M-GGUF', 'd1-omni-600M-Q8_0.gguf'),
     mb: 407,
-    blurb: 'Liquid AI, the smallest. Fast, rough. A good first download.',
-    layers: true,
+    blurb: 'Liquid AI, the smallest and fastest. Answers through its own decision head, so no layer curve yet.',
+    layers: false,
   },
   {
     id: 'd1-2b',
@@ -29,7 +29,7 @@ export const MODELS: ModelSpec[] = [
     file: 'd1-2B-Q4_K_M.gguf',
     url: hf('LiquidAI/d1-2B-GGUF', 'd1-2B-Q4_K_M.gguf'),
     mb: 1100,
-    blurb: 'Liquid AI, the one to compare against. About 2 GB of RAM while loaded.',
+    blurb: 'Liquid AI. The full layer curve, and the one to compare against. About 2 GB of RAM while loaded.',
     layers: true,
   },
   {
@@ -38,7 +38,7 @@ export const MODELS: ModelSpec[] = [
     file: 'vllm-d3-edge-Q8_0.gguf',
     url: hf('ggml-org/vllm-d3-edge-GGUF', 'vllm-d3-edge-Q8_0.gguf'),
     mb: 806,
-    blurb: 'ggml-org, a different family: reads its answer from label codes, non-causal attention.',
+    blurb: 'ggml-org, a different family. The full layer curve, 806 MB, non-causal attention.',
     layers: true,
   },
   {

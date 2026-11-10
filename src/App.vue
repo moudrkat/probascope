@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { MODELS, type ModelSpec } from './models'
+import { lastError } from './errors'
 import { decide, download, isDownloaded, isNative, load, modelInfo, remove, type LayerInfo, type ModelInfo } from './native'
 
 type Tab = 'answer' | 'layers' | 'inside'
@@ -126,7 +127,7 @@ async function run() {
       const rows = (layers.probabilities ?? []).map((p) => (Array.isArray(p) ? p : null))
       result.value = { type: 'choice', keys, final: keys.map((k) => probs[k]), rows, ms: layers.ms ?? [], forwardMs: layers.timings?.forward_ms ?? 0, readoutMs: layers.timings?.readout_ms ?? 0, tokens_: layers.tokens ?? [], change: layers.token_change ?? [], attention: layers.attention ?? {}, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
     }
-    if (!current.value.layers && !result.value.layersError) result.value.layersError = 'this model reads its answer from a pooled embedding, no layer curve yet'
+    if (!current.value.layers && !result.value.layersError) result.value.layersError = 'no layer curve for this model yet'
     editing.value = false
   } catch (e) {
     error.value = String((e as Error).message ?? e)
@@ -269,9 +270,11 @@ function draw() {
   const dpr = window.devicePixelRatio || 1
   const cssW = c.clientWidth || c.parentElement?.clientWidth || 400
   const cssH = bodyHeight.value
-  if (!(cssH > 0)) return
-  c.width = Math.round(cssW * dpr); c.height = Math.round(cssH * dpr)
-  c.style.height = cssH + 'px'
+  if (!(cssH > 0) || !(cssW > 0)) return
+  // resize the bitmap only when needed: resizing fires the ResizeObserver, which would call draw again forever
+  const pw = Math.round(cssW * dpr), ph = Math.round(cssH * dpr)
+  if (c.width !== pw || c.height !== ph) { c.width = pw; c.height = ph }
+  if (c.style.height !== cssH + 'px') c.style.height = cssH + 'px'
   const g = c.getContext('2d')!
   g.setTransform(dpr, 0, 0, dpr, 0, 0)
   g.clearRect(0, 0, cssW, cssH)
@@ -315,17 +318,14 @@ function draw() {
     }
   })
 }
-const redraw = () => { nextTick(draw); requestAnimationFrame(draw); setTimeout(draw, 120) }
+let drawing = false
+const safeDraw = () => { if (drawing) return; drawing = true; try { draw() } finally { drawing = false } }
+const redraw = () => { nextTick(safeDraw); requestAnimationFrame(safeDraw); setTimeout(safeDraw, 120) }
 watch([result, pickedBlock, lit, rows], redraw)
 watch(tab, (t) => { if (t === 'inside') redraw() })
-// the WebView may hand the canvas its size late: draw whenever it gets one
-let ro: ResizeObserver | null = null
-watch(canvasEl, (c) => {
-  if (ro) { ro.disconnect(); ro = null }
-  if (c && 'ResizeObserver' in window) { ro = new ResizeObserver(() => draw()); ro.observe(c) }
-  if (c) redraw()
-})
-onMounted(() => window.addEventListener('resize', draw))
+// the WebView may hand the canvas its size late: a few spaced attempts after it appears, no observers (they loop)
+watch(canvasEl, (c) => { if (c) { redraw(); setTimeout(safeDraw, 400); setTimeout(safeDraw, 1000) } })
+onMounted(() => window.addEventListener('resize', safeDraw))
 let bodyDown = false
 function bodyPick(ev: PointerEvent) {
   const c = canvasEl.value
@@ -387,6 +387,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
     </section>
 
     <p v-if="error" class="err">{{ error }}</p>
+    <p v-if="lastError" class="err" @click="lastError = ''">app error (tap to hide): {{ lastError }}</p>
 
     <template v-if="current">
       <template v-if="editing || !result">
@@ -460,6 +461,9 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
             <button v-for="hd in heads" :key="hd.h" class="head" :class="{ on: pickedHead === hd.h }" :style="{ background: `rgba(233,238,245,${0.08 + 0.92 * hd.focus})`, color: hd.focus > 0.5 ? '#0b1018' : '#8fa0b5' }" @click="pickedHead = pickedHead === hd.h ? null : hd.h" :title="'head ' + hd.h">{{ hd.h }}</button>
             <span class="note">its {{ heads.length }} attention heads · brighter = looked harder at one word · tap one</span>
           </div>
+          <p v-if="heat.length" class="heat"><span v-for="(c, t) in heat" :key="t" :style="{ background: `rgba(233,238,245,${c.a * 0.75})`, color: c.a > 0.55 ? '#0b1018' : undefined }">{{ c.piece }}</span></p>
+          <span v-if="heat.length" class="note">{{ pickedHead !== null ? 'where head ' + pickedHead + ' looked' : 'the words this block changed most' }} · this is the exact text the model read, template included</span>
+        </div>
         <div v-else class="expl placeholder"><span>tap or drag a block below: what it is, and the words it worked on</span></div>
         <div class="body">
           <canvas ref="canvasEl" @pointerdown="bodyDownFn" @pointermove="bodyMove" @pointerup="bodyUp" @pointercancel="bodyUp" @pointerleave="bodyUp"></canvas>
@@ -471,9 +475,6 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
         </div>
         <p v-if="!rows.length" class="err">the model reported no blocks</p>
         <p class="note">drag a finger over the blocks<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a> the pass, {{ replayNote }}</template></p>
-          <p v-if="heat.length" class="heat"><span v-for="(c, t) in heat" :key="t" :style="{ background: `rgba(233,238,245,${c.a * 0.75})`, color: c.a > 0.55 ? '#0b1018' : undefined }">{{ c.piece }}</span></p>
-          <span v-if="heat.length" class="note">{{ pickedHead !== null ? 'where head ' + pickedHead + ' looked' : 'the words this block changed most' }} · this is the exact text the model read, template included</span>
-        </div>
       </section>
       <p v-else-if="tab === 'inside'" class="note">no model loaded</p>
     </template>
