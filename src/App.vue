@@ -258,10 +258,20 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <span v-if="picked.decision_head">One of the {{ info.n_layer_decision }} trailing blocks trained for answering. Everything below is the backbone it shares with the chat model.</span>
           <span v-if="picked.kind.startsWith('attention')">{{ info.n_head }} heads of {{ Math.round(info.n_embd / info.n_head) }} numbers each, {{ info.n_head_kv }} key/value heads.</span>
         </div>
+        <div class="cap out">
+          <span class="arr">↑</span>
+          <span v-if="result">out · {{ result.keys.length }} score{{ result.keys.length > 1 ? 's' : '' }} ({{ result.type === 'noul' ? 'yes / no' : result.keys.join(' / ') }}) → softmax → {{ shown.find(o => o.win)?.key }} {{ shown.find(o => o.win)?.p.toFixed(2) }}</span>
+          <span v-else>out · one score per option from the last position → softmax → the answer</span>
+        </div>
         <div class="stack">
           <button v-for="l in [...info.layers].reverse()" :key="l.i" class="blk" :class="[l.kind, { head: l.decision_head, on: pickedBlock === l.i }]" @click="pickedBlock = pickedBlock === l.i ? null : l.i">
             <span class="i">{{ l.i }}</span><span class="k"></span><span class="t">{{ l.kind === 'attention_swa' ? 'attention (window)' : l.kind }}{{ l.decision_head ? ' · head' : '' }}</span>
           </button>
+        </div>
+        <div class="cap in">
+          <span class="arr">↑</span>
+          <span v-if="result">in · {{ result.tokens }} tokens × {{ info.n_embd }} numbers each = {{ (result.tokens * info.n_embd).toLocaleString() }} numbers for your text</span>
+          <span v-else>in · the text as tokens, {{ info.n_embd }} numbers each</span>
         </div>
       </section>
       <p v-else-if="tab === 'inside'" class="note">no model loaded</p>
