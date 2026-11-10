@@ -24,10 +24,10 @@ Pixel 8a: d1 2B about 0.5 s per decision.
 - **inside**: the blocks of the model, each as big as its weights, brighter where it worked on
   your words. Tap a block for its heads and the words it changed.
 
-The curve is verified per family: on the last block it reproduces the model's own answer
-(d1 2B 0.004 at Q4, d1-omni 600M 0.0004, Laya 0.0005, H2O Lightning 0.007 at IQ3). d1-omni and
-Laya answer through a trained decision head, so their curve re-runs that head on every block.
-Early blocks of a logit lens can mislead.
+The curve is verified for all six models: on the last block it reproduces the model's own answer
+to 0.0000 (d1-omni 600M to 0.001). Each family is read the way it answers: label logits (d1 2B,
+vllm-d3, H2O Lightning), a trained decision head re-run on every block (d1-omni, Laya), or
+question · option (Kev). Early blocks of a logit lens can mislead.
 
 ## Build it yourself
 
@@ -48,6 +48,6 @@ phone, ms in the PR. The iOS side of the plugin. A curve for a family without on
 
 ## Next
 
-A curve for Kev (pointer readout), attention per option, patching between two texts (which block
+Attention per option, patching between two texts (which block
 flips the answer), the same question across models, a calibration check on your examples,
 images and audio as the state, iOS.

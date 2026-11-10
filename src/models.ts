@@ -47,8 +47,8 @@ export const MODELS: ModelSpec[] = [
     file: 'Kev-0.8B-Q8_0.gguf',
     url: hf('ggml-org/Kev-0.8B-GGUF', 'Kev-0.8B-Q8_0.gguf'),
     mb: 812,
-    blurb: 'ggml-org. Reads its answer from an embedding, so no layer curve yet.',
-    layers: false,
+    blurb: 'ggml-org, a Qwen3.5 hybrid. Reads its answer as question · option; full curve.',
+    layers: true,
   },
   {
     id: 'h2o-lightning-4b',
