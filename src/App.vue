@@ -28,6 +28,7 @@ interface Result {
 }
 const result = ref<Result | null>(null)
 const busy = ref(false)
+const wantLayers = ref(true) // the per-layer readout costs time on a phone; off = a plain decision
 const lensAt = ref<number | null>(null)
 const pickedBlock = ref<number | null>(null)
 
@@ -95,7 +96,8 @@ async function run() {
       keys.length >= 2
         ? { type: 'choice', instructions: question.value, criteria: Object.fromEntries(keys.map((k) => [k, k])) }
         : { type: 'noul', instructions: question.value }
-    const request = { state: stateText.value, questions: { q }, layers: current.value.layers }
+    const withLayers = current.value.layers && wantLayers.value
+    const request = { state: stateText.value, questions: { q }, layers: withLayers }
     const { response, wallMs } = await decide(request)
     if (response.error) throw new Error((response.error as { message: string }).message)
     const answers = response.answers as Record<string, Record<string, unknown>>
@@ -111,6 +113,7 @@ async function run() {
       result.value = { type: 'choice', keys, final: keys.map((k) => probs[k]), rows, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
     }
     if (!current.value.layers && !result.value.layersError) result.value.layersError = 'this model reads its answer from a pooled embedding, no layer curve yet'
+    if (!withLayers && !result.value.layersError) result.value.layersError = 'layers are off, switch them on and decide again'
   } catch (e) {
     error.value = String((e as Error).message ?? e)
   } finally {
@@ -210,6 +213,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
         <button class="tab" :class="{ on: tab === 'decide' }" @click="tab = 'decide'">answer</button>
         <button class="tab" :class="{ on: tab === 'layers' }" @click="tab = 'layers'">layers</button>
         <button class="tab" :class="{ on: tab === 'inside' }" @click="tab = 'inside'">inside</button>
+        <button class="tab sw" :class="{ on: wantLayers }" @click="wantLayers = !wantLayers" title="read every layer during decide">{{ wantLayers ? 'layers on' : 'layers off' }}</button>
       </nav>
 
       <section v-if="tab !== 'inside' && result" class="answer">
@@ -217,7 +221,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
           <span class="nm">{{ o.key }}</span><span class="p">{{ o.p.toFixed(2) }}</span>
           <div class="bar"><span :style="{ width: o.p * 100 + '%' }"></span></div>
         </div>
-        <p class="note">{{ result.tokens }} tokens · {{ result.wallMs.toFixed(0) }} ms · {{ modelType }}<span v-if="lensAt !== null"> · as read at layer {{ lensAt }}</span></p>
+        <p class="note">{{ result.tokens }} tokens · {{ result.wallMs.toFixed(0) }} ms{{ result.rows.length ? ' with layers' : '' }} · {{ modelType }}<span v-if="lensAt !== null"> · as read at layer {{ lensAt }}</span></p>
       </section>
       <p v-else-if="tab !== 'inside'" class="note">write a state and a question, then decide</p>
 

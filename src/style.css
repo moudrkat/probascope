@@ -60,6 +60,8 @@ textarea:focus, input:focus { outline: none; border-color: var(--accent); }
   padding: 5px 12px; font: inherit; font-size: 12px;
 }
 .tab.on { color: var(--accent); border-color: var(--accent); }
+.tab.sw { margin-left: auto; }
+.tab.sw.on { color: var(--live); border-color: var(--live); }
 
 .answer { display: grid; gap: 8px; }
 .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; }
