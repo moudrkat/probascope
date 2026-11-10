@@ -153,11 +153,22 @@ const curve = computed(() => {
   const x = (i: number) => PX + (iw * i) / Math.max(1, L - 1)
   const y = (v: number) => PT + ih * (1 - v)
   const best = r.final.indexOf(Math.max(...r.final))
-  const series = r.keys.map((k, j) => ({
-    key: k,
-    win: j === best,
-    d: r.rows.map((row, i) => (row ? `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(row[j]).toFixed(1)}` : '')).filter(Boolean).join(' '),
-  }))
+  // the winner is amber and solid; the others get their own colour and dash so they can be told apart
+  const palette = ['#6ea8fe', '#3dbd7d', '#c084fc', '#e5636b', '#8fa0b5']
+  const dashes = ['6 3', '2 3', '8 3 2 3', '4 2', '1 3']
+  let other = 0
+  const series = r.keys.map((k, j) => {
+    const win = j === best
+    const n = win ? 0 : other++
+    return {
+      key: k,
+      win,
+      color: win ? '#e8b45a' : palette[n % palette.length],
+      dash: win ? undefined : dashes[n % dashes.length],
+      final: r.final[j],
+      d: r.rows.map((row, i) => (row ? `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(row[j]).toFixed(1)}` : '')).filter(Boolean).join(' '),
+    }
+  })
   const at = lensAt.value ?? L - 1
   const row = r.rows[at]
   const blocks = (info.value?.layers ?? []).slice(0, L).map((l) => ({ i: l.i, kind: l.kind, head: l.decision_head, bytes: l.bytes }))
@@ -393,11 +404,15 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
             <text :x="PX" :y="H - 4" fill="#5c6b80" font-size="10">in</text>
             <text :x="W - PX" :y="H - 4" fill="#5c6b80" font-size="10" text-anchor="end">out</text>
             <path v-if="curve.ghostD" :d="curve.ghostD" fill="none" stroke="#e8b45a" stroke-width="1.2" stroke-dasharray="2 4" opacity="0.6" />
-            <path v-for="s in curve.series" :key="s.key" :d="s.d" fill="none" :stroke="s.win ? '#e8b45a' : '#8fa0b5'" :stroke-width="s.win ? 2.4 : 1.4" :stroke-dasharray="s.win ? undefined : '3 3'" />
+            <path v-for="s in curve.series" :key="s.key" :d="s.d" fill="none" :stroke="s.color" :stroke-width="s.win ? 2.4 : 1.5" :stroke-dasharray="s.dash" />
             <line :x1="curve.x(curve.at)" :x2="curve.x(curve.at)" :y1="PT" :y2="H - PB" stroke="#e9eef5" stroke-width="1" stroke-dasharray="2 3" />
             <circle v-if="curve.dotY !== null" :cx="curve.x(curve.at)" :cy="curve.dotY" r="4" fill="#e8b45a" />
           </svg>
-          <p class="note">amber: the winning option after each block · grey: the others · the strip below is the model, block by block<span v-if="curve.ghostP !== null"> · dotted: your previous run</span></p>
+          <div class="legend-lines">
+            <span v-for="s in curve.series" :key="s.key"><svg class="sw" viewBox="0 0 28 8"><line x1="1" x2="27" y1="4" y2="4" :stroke="s.color" :stroke-width="s.win ? 2.4 : 1.5" :stroke-dasharray="s.dash" /></svg>{{ s.key }} {{ s.final.toFixed(2) }}</span>
+            <span v-if="curve.ghostP !== null"><svg class="sw" viewBox="0 0 28 8"><line x1="1" x2="27" y1="4" y2="4" stroke="#e8b45a" stroke-width="1.2" stroke-dasharray="2 4" opacity="0.6" /></svg>previous run {{ curve.ghostP.toFixed(2) }}</span>
+          </div>
+          <p class="note">each line: that option's probability read after each block · the strip below is the model, block by block</p>
         </template>
         <p v-else class="note">{{ result.layersError || 'no layer readout' }}</p>
       </section>
