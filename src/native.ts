@@ -14,7 +14,7 @@ export async function modelPath(spec: ModelSpec): Promise<string> {
 export async function isDownloaded(spec: ModelSpec): Promise<boolean> {
   try {
     const st = await Filesystem.stat({ path: spec.file, directory: Directory.Data })
-    return (st.size ?? 0) > spec.mb * 1e6 * 0.9
+    return (st.size ?? 0) > spec.mb * 1e6 * 0.99
   } catch {
     return false
   }
@@ -44,9 +44,19 @@ export async function remove(spec: ModelSpec): Promise<void> {
   }
 }
 
-export async function load(spec: ModelSpec): Promise<{ modelType: string }> {
+// repacked weights are faster but take about twice the file in RAM; without enough free memory Android would
+// kill the app silently, so load plain weights instead and say so
+export async function load(spec: ModelSpec): Promise<{ modelType: string; repack: boolean }> {
   const path = await modelPath(spec)
-  return Kneejerk.load({ path, nCtx: 4096 })
+  let repack = true
+  try {
+    const m = await Kneejerk.memory()
+    if (m.totalMem > 0 && m.availMem < spec.mb * 1e6 * 2.6) repack = false
+  } catch {
+    // older plugin: keep the default
+  }
+  const r = await Kneejerk.load({ path, nCtx: 4096, repack })
+  return { modelType: r.modelType, repack }
 }
 
 export async function unload(): Promise<void> {

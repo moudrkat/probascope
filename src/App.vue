@@ -10,6 +10,7 @@ const tab = ref<Tab>('answer')
 const pickingModel = ref(false)
 const current = ref<ModelSpec | null>(null)
 const modelType = ref('')
+const lowMem = ref(false) // loaded without repacking: half the RAM, slower
 const info = ref<ModelInfo | null>(null)
 const status = reactive<Record<string, { downloaded: boolean; progress: number | null; loading: boolean }>>({})
 const error = ref('')
@@ -66,6 +67,7 @@ async function useModel(spec: ModelSpec) {
     const r = await load(spec)
     current.value = spec
     modelType.value = r.modelType
+    lowMem.value = !r.repack
     info.value = await modelInfo()
     result.value = null
     pickingModel.value = false
@@ -107,7 +109,8 @@ async function run() {
   lensAt.value = null
   if (result.value && result.value.rows.length) ghost.value = result.value
   try {
-    const keys = options.value.map((o) => o.trim()).filter(Boolean)
+    const keys = [...new Set(options.value.map((o) => o.trim()).filter(Boolean))]
+    if (keys.length === 1) throw new Error('give two or more options, or none for a yes/no question')
     const q: Record<string, unknown> =
       keys.length >= 2
         ? { type: 'choice', instructions: question.value, criteria: Object.fromEntries(keys.map((k) => [k, k])) }
@@ -389,6 +392,7 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
     </section>
 
     <p v-if="error" class="err">{{ error }}</p>
+    <p v-if="lowMem && current" class="note">loaded without repacked weights: this phone has little free RAM, so the model is slower but half the size</p>
     <p v-if="lastError" class="err" @click="lastError = ''">app error (tap to hide): {{ lastError }}</p>
 
     <template v-if="current">
