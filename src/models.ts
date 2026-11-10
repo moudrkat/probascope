@@ -65,7 +65,7 @@ export const MODELS: ModelSpec[] = [
     file: 'Laya-Q8_0.gguf',
     url: hf('ggml-org/Laya-GGUF', 'Laya-Q8_0.gguf'),
     mb: 449,
-    blurb: 'ggml-org. Reads its answer from a pooled embedding, so no layer curve yet.',
-    layers: false,
+    blurb: 'ggml-org, a ModernBERT: 28 attention blocks and a decision head. Full curve, through that head.',
+    layers: true,
   },
 ]
