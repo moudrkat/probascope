@@ -36,7 +36,10 @@ Measured on a Pixel 8a: d1 2B answers in about 0.5 s.
   paper: short convolutions, attention, and the trailing blocks trained as the decision head.
   Tap a block for what it does and its sizes.
 
-Laya reads its answer from a pooled embedding, so it has no layer curve yet.
+The curve is verified per family: on the last block it reproduces the model's own answer (d1 2B
+0.004 at Q4, d1-omni 600M 0.0004, Laya 0.0005, H2O Lightning 0.007 at IQ3; the numbers are in
+kneejerk's `tests/results_layers_2026-11-10.txt`). For d1-omni and Laya the curve re-runs the
+model's trained decision head on every block, because that is how those models answer.
 
 ## Build it yourself
 
@@ -63,8 +66,9 @@ when it is time. Keep it small and measured.
 blurb, whether the layer curve works for its family), tried on a phone, with the ms in the PR.
 The model must be one llama.cpp knows as a decision model; the curve needs its readout in kneejerk.
 
-## Not yet
+## Next
 
-iOS (the library builds for it, the Swift binding does not exist), images and audio as the
-state (d1-omni can, the library cannot yet), a curve for pooled-embedding models, comparing the
-same question across models side by side, attention to the words of the state.
+In this order: a curve for Kev (it reads a pointer, not a head); attention per option, not only
+from the last position; activation patching between two texts (which block flips the answer, the
+same hook can write); the same question across models side by side; a calibration check on your
+own examples; images and audio as the state (d1-omni can, the library cannot yet); iOS.
