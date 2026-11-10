@@ -33,6 +33,7 @@ interface Result {
   tokens: number
 }
 const result = ref<Result | null>(null)
+const editing = ref(true) // the inputs fold into one line after a decision; tap to edit again
 const ghost = ref<Result | null>(null) // the previous run, drawn dashed under the new curve
 const busy = ref(false)
 const lensAt = ref<number | null>(null)
@@ -126,6 +127,7 @@ async function run() {
       result.value = { type: 'choice', keys, final: keys.map((k) => probs[k]), rows, ms: layers.ms ?? [], forwardMs: layers.timings?.forward_ms ?? 0, readoutMs: layers.timings?.readout_ms ?? 0, tokens_: layers.tokens ?? [], change: layers.token_change ?? [], attention: layers.attention ?? {}, layersError: layers.error ?? '', wallMs, tokens: usage.input_tokens }
     }
     if (!current.value.layers && !result.value.layersError) result.value.layersError = 'this model reads its answer from a pooled embedding, no layer curve yet'
+    editing.value = false
   } catch (e) {
     error.value = String((e as Error).message ?? e)
   } finally {
@@ -333,7 +335,9 @@ const heads = computed(() => {
   if (!r || !b || !b.kind.startsWith('attention')) return []
   const hs = r.attention[String(b.i)]
   if (!hs) return []
-  return hs.map((row, h) => ({ h, focus: Math.max(0, ...row.slice(1)) }))
+  const raw = hs.map((row) => Math.max(0, ...row.slice(1)))
+  const m = Math.max(1e-6, ...raw)
+  return raw.map((f, h) => ({ h, focus: f / m }))
 })
 // the prompt as the model reads it, each token shaded by the picked block (or head)
 const heat = computed(() => {
@@ -344,7 +348,7 @@ const heat = computed(() => {
   if (!w) w = r.change[b.i]
   if (!w) return []
   const m = Math.max(1e-6, ...(pickedHead.value !== null ? w.slice(1) : w))
-  return r.tokens_.map((piece, t) => ({ piece, a: Math.min(1, w![t] / m) }))
+  return r.tokens_.map((piece, t) => { const v = Math.min(1, w![t] / m); return { piece, a: v < 0.3 ? 0 : (v - 0.3) / 0.7 } })
 })
 const fmtM = (n: number) => (n >= 1e9 ? (n / 1e9).toFixed(2) + ' B' : (n / 1e6).toFixed(0) + ' M')
 const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
@@ -376,12 +380,18 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
     <p v-if="error" class="err">{{ error }}</p>
 
     <template v-if="current">
-      <textarea id="state" v-model="stateText" rows="3" placeholder="paste anything"></textarea>
-      <input id="question" v-model="question" placeholder="ask one question (no options = yes/no)">
-      <div class="opts">
-        <textarea v-for="(_, i) in options" :key="i" v-model="options[i]" rows="1" :placeholder="'option ' + (i + 1)" @input="grow" @focus="grow" @keydown.backspace="options[i] === '' && dropOption(i)"></textarea>
-        <button v-if="options.length < 6" @click="addOption">+</button>
-      </div>
+      <template v-if="editing || !result">
+        <textarea id="state" v-model="stateText" rows="3" placeholder="paste anything"></textarea>
+        <input id="question" v-model="question" placeholder="ask one question (no options = yes/no)">
+        <div class="opts">
+          <textarea v-for="(_, i) in options" :key="i" v-model="options[i]" rows="1" :placeholder="'option ' + (i + 1)" @input="grow" @focus="grow" @keydown.backspace="options[i] === '' && dropOption(i)"></textarea>
+          <button v-if="options.length < 6" @click="addOption">+</button>
+        </div>
+      </template>
+      <button v-else class="folded" @click="editing = true">
+        <span class="st">{{ stateText }}</span>
+        <span class="q">{{ question }}<template v-if="options.filter(o => o.trim()).length"> · {{ options.filter(o => o.trim()).length }} options</template> · tap to edit</span>
+      </button>
 
       <nav class="tabs">
         <button class="tab" :class="{ on: tab === 'answer' }" @click="tab = 'answer'">answer</button>
@@ -426,23 +436,14 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
       <section v-if="tab === 'inside' && info" class="arch">
         <div class="cap out">
           <span class="arr">↑</span>
-          <span v-if="result">out · {{ result.keys.length }} score{{ result.keys.length > 1 ? 's' : '' }} ({{ result.type === 'noul' ? 'yes / no' : result.keys.join(' / ') }}) → softmax → {{ shown.find(o => o.win)?.key }} {{ shown.find(o => o.win)?.p.toFixed(2) }}</span>
-          <span v-else>out · one score per option from the last position → softmax → the answer</span>
+          <span v-if="result">out · {{ shown.find(o => o.win)?.key }} {{ shown.find(o => o.win)?.p.toFixed(2) }} · softmax of {{ result.keys.length }} score{{ result.keys.length > 1 ? 's' : '' }}</span>
+          <span v-else>out · one score per option, softmax, the answer</span>
         </div>
         <div class="plate">
           <b>{{ info.name }}</b>
           <span>{{ fmtM(info.n_params) }} parameters · {{ info.n_layer }} blocks · {{ fmtMB(info.size_bytes) }} in your phone</span>
           <span class="legend"><i class="c"></i> short convolution <i class="a"></i> attention <i class="h"></i> decision head · white = how much it worked on each word</span>
         </div>
-        <div class="body">
-          <canvas ref="canvasEl" @pointerdown="bodyDownFn" @pointermove="bodyMove" @pointerup="bodyUp" @pointercancel="bodyUp" @pointerleave="bodyUp"></canvas>
-        </div>
-        <div class="cap in">
-          <span class="arr">↑</span>
-          <span v-if="result">in · {{ result.tokens }} tokens × {{ info.n_embd }} numbers each · embeddings {{ fmtMB(info.bytes_outside_blocks) }}</span>
-          <span v-else>in · the text as tokens, {{ info.n_embd }} numbers each</span>
-        </div>
-        <p class="note">drag a finger over the blocks<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a> the pass, {{ replayNote }}</template></p>
         <div v-if="picked" class="expl">
           <b>block {{ picked.i }} · {{ picked.kind === 'attention_swa' ? 'attention (window)' : picked.kind }} · {{ fmtMB(picked.bytes) }}{{ picked.decision_head ? ' · decision head' : '' }}</b>
           <span>{{ KIND_TEXT[picked.kind] }}<template v-if="picked.decision_head"> One of the {{ info.n_layer_decision }} trailing blocks trained for answering; below is the backbone shared with the chat model.</template></span>
@@ -450,6 +451,16 @@ const fmtMB = (n: number) => (n / 1e6).toFixed(0) + ' MB'
             <button v-for="hd in heads" :key="hd.h" class="head" :class="{ on: pickedHead === hd.h }" :style="{ background: `rgba(233,238,245,${0.08 + 0.92 * hd.focus})`, color: hd.focus > 0.5 ? '#0b1018' : '#8fa0b5' }" @click="pickedHead = pickedHead === hd.h ? null : hd.h" :title="'head ' + hd.h">{{ hd.h }}</button>
             <span class="note">its {{ heads.length }} attention heads · brighter = looked harder at one word · tap one</span>
           </div>
+        <div v-else class="expl placeholder"><span>tap or drag a block below: what it is, and the words it worked on</span></div>
+        <div class="body">
+          <canvas ref="canvasEl" @pointerdown="bodyDownFn" @pointermove="bodyMove" @pointerup="bodyUp" @pointercancel="bodyUp" @pointerleave="bodyUp"></canvas>
+        </div>
+        <div class="cap in">
+          <span class="arr">↑</span>
+          <span v-if="result">in · your text as {{ result.tokens }} tokens, {{ info.n_embd }} numbers each</span>
+          <span v-else>in · the text as tokens, {{ info.n_embd }} numbers each</span>
+        </div>
+        <p class="note">drag a finger over the blocks<template v-if="result && result.ms.length"> · <a href="#" @click.prevent="replay">replay</a> the pass, {{ replayNote }}</template></p>
           <p v-if="heat.length" class="heat"><span v-for="(c, t) in heat" :key="t" :style="{ background: `rgba(233,238,245,${c.a * 0.75})`, color: c.a > 0.55 ? '#0b1018' : undefined }">{{ c.piece }}</span></p>
           <span v-if="heat.length" class="note">{{ pickedHead !== null ? 'where head ' + pickedHead + ' looked' : 'the words this block changed most' }} · this is the exact text the model read, template included</span>
         </div>

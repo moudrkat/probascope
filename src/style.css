@@ -113,7 +113,8 @@ svg { width: 100%; height: auto; display: block; touch-action: none; }
 .cap .arr { color: var(--accent); font-size: 16px; text-align: center; }
 .cap.out { color: var(--ink); }
 .expl { background: var(--panel); border: 1px solid var(--line2); border-radius: 10px; padding: 10px 12px; font-size: 12px; color: var(--muted); display: grid; gap: 6px;
-  position: sticky; top: calc(8px + env(safe-area-inset-top, 0px)); z-index: 5; box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+  min-height: 64px; }
+.expl.placeholder { color: var(--faint); border-style: dashed; align-content: center; }
 .expl b { color: var(--ink); font-weight: 700; }
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12px; margin: 0; }
 .facts dt { color: var(--faint); }
@@ -152,3 +153,7 @@ svg { width: 100%; height: auto; display: block; touch-action: none; }
 .legend-lines { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; color: var(--muted); }
 .legend-lines span { display: inline-flex; align-items: center; gap: 5px; }
 .legend-lines .sw { width: 28px; height: 8px; display: inline-block; }
+
+.folded { display: grid; gap: 3px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; color: var(--ink); font: inherit; }
+.folded .st { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folded .q { font-size: 11px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
