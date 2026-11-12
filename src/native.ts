@@ -20,17 +20,15 @@ export async function isDownloaded(spec: ModelSpec): Promise<boolean> {
   }
 }
 
+// The plugin's download continues an interrupted file where it stopped (HTTP Range, a .part file until it is
+// whole): a 1-2 GB model over a pub's wifi does get interrupted, and the old download had to start over.
 export async function download(spec: ModelSpec, onProgress: (fraction: number) => void): Promise<void> {
-  const listener = await Filesystem.addListener('progress', (p) => {
-    if (p.contentLength > 0) onProgress(p.bytes / p.contentLength)
+  const path = await modelPath(spec)
+  const listener = await Kneejerk.addListener('downloadProgress', (p) => {
+    if (p.path === path && p.total > 0) onProgress(p.bytes / p.total)
   })
   try {
-    await Filesystem.downloadFile({
-      url: spec.url,
-      path: spec.file,
-      directory: Directory.Data,
-      progress: true,
-    })
+    await Kneejerk.download({ url: spec.url, path })
   } finally {
     await listener.remove()
   }
